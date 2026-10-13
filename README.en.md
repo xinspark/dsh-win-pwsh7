@@ -282,7 +282,9 @@ Executor rows:
   pwsh-sandbox : pwshPath = C:\Users\...\WindowsApps\Microsoft.PowerShell_8wekyb3d8bbwe\pwsh.exe (PowerShell 7.6.6, Store family alias)
   desktop-windows-pwsh-sandbox : pwshPath = C:\Users\...\WindowsApps\...\pwsh.exe (PowerShell 7.6.6, Store family alias)
 
-The pwsh tool currently runs on PowerShell 7.6.6 via row pwsh-sandbox.
+The pwsh tool currently runs on PowerShell 7.6.6 via row desktop-windows-pwsh-sandbox.
+(Row `pwsh-sandbox` above pins the same alias but is disabled, and a disabled row does not run — so it
+is deliberately not the row named here.)
 That pin is the version-stable Store family alias: its directory carries no version, so Store
 updates do not move it, and the ACL sandbox still confines what it runs. Nothing to configure.
 Caveat: Windows resolves the alias through AppInfo package activation, which is undocumented —

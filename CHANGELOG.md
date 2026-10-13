@@ -33,3 +33,7 @@ release published outside its author's machine, and it is the behaviour the READ
   own schema dialect, the ecosystem's client descriptor shape, the optional `jobs` service, and the
   string-error envelope), and 1 is recorded as backlog: the module-level state a second application
   in one process would share.
+- **Confirmed on the machine that found it** — the "a disabled row is never named as the runtime" fix
+  is not theoretical. This profile carries `pwsh-sandbox` (disabled) beside
+  `desktop-windows-pwsh-sandbox` (enabled), both pinning the same Store family alias; the report named
+  the *disabled* row until the fix, and after the restart it names the enabled one instead.

@@ -180,7 +180,8 @@ Executor rows:
   pwsh-sandbox : pwshPath = C:\Users\...\WindowsApps\Microsoft.PowerShell_8wekyb3d8bbwe\pwsh.exe (PowerShell 7.6.6, Store family alias)
   desktop-windows-pwsh-sandbox : pwshPath = C:\Users\...\WindowsApps\...\pwsh.exe (PowerShell 7.6.6, Store family alias)
 
-The pwsh tool currently runs on PowerShell 7.6.6 via row pwsh-sandbox.
+The pwsh tool currently runs on PowerShell 7.6.6 via row desktop-windows-pwsh-sandbox.
+（上面那条 `pwsh-sandbox` 虽然 pin 了同一个别名，但它是 **disabled** 的 —— 不运行的行不会被报成"当前运行时"。）
 That pin is the version-stable Store family alias: …
 ```
 
