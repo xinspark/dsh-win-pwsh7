@@ -1,0 +1,55 @@
+{
+  "name": "dsh-win-pwsh7",
+  "version": "0.12.1",
+  "type": "module",
+  "description": "Detect, validate, and (on request) install PowerShell 7 for the Harness pwsh tool on Windows — the self-updating Microsoft Store package by default, with the connection checked first because Windows defers Store downloads on a metered connection — and pin the version-stable Store family alias.",
+  "license": "MIT",
+  "icon": "./icon.svg",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./typert": "./lib/typert.host.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./icon.svg": "./icon.svg",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "lib/typert.host.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "README.md",
+    "README.en.md",
+    "CHANGELOG.md",
+    "LICENSE",
+    "tools/"
+  ],
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "powershell",
+    "pwsh",
+    "windows"
+  ],
+  "scripts": {
+    "check": "node tools/check-host.mjs && node tools/check-client.mjs",
+    "prepublishOnly": "npm run check"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-plugin-manager",
+        "@deepseek-ai/dsh-api-remotes"
+      ]
+    }
+  }
+}

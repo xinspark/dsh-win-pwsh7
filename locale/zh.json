@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Windows 版 PowerShell 7",
+    "description": "检测、校验，并按需安装 PowerShell 7：默认装随 Windows 自更新的商店版，并在动手前先查网络是否被标记为「按流量计费」（计量网络上 Windows 会推迟商店下载）。"
+  }
+}

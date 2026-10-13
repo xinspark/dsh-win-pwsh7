@@ -1,0 +1,6 @@
+# One Host row: it registers the two pwsh7 tools, runs the activation sweep, and serves the
+# plugin page's diagnostics over its typert endpoint. It never writes the executor row's
+# `pwshPath` — wiring the executor stays a patch edit the user makes.
+- insert:
+    - id: win-pwsh7
+      name: dsh-win-pwsh7
