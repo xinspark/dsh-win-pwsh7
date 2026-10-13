@@ -22,7 +22,7 @@ dsh plugin --profile desktop add github:XinSpark/dsh-win-pwsh7#v0.12.1
 # replace `desktop` with the profile you use — `dsh plugin list` says which one that is
 ```
 
-- **npm** (once published): `dsh plugin --profile desktop add dsh-win-pwsh7`
+- **npm**: `dsh plugin --profile desktop add dsh-win-pwsh7` (or `npm i dsh-win-pwsh7` directly)
 - **Local development**: `npm pack`, then `dsh plugin --profile desktop add file:<absolute path to the .tgz>`
 
 Restart DSH afterwards, then check the runtime it reads on the plugin page (or by asking for

@@ -20,7 +20,7 @@ dsh plugin --profile desktop add github:XinSpark/dsh-win-pwsh7#v0.12.1
 # desktop 换成你在用的 profile —— `dsh plugin list` 能看出来是哪个
 ```
 
-- **npm**（发布后）：`dsh plugin --profile desktop add dsh-win-pwsh7`
+- **npm**：`dsh plugin --profile desktop add dsh-win-pwsh7`（亦可 `npm i dsh-win-pwsh7` 直接用）
 - **本地开发**：`npm pack`，然后 `dsh plugin --profile desktop add file:<生成的 .tgz 绝对路径>`
 
 装完**重启 DSH**，然后在插件页（或让模型调 `pwsh7_status`）看它读到的运行时；需要接线时，把报告里给出的 profile 补丁**整段**粘进 `~\.dsh\profiles\<profile>\cordis.patch.yml` 再重启。**它不会替你改执行器的 `pwshPath`** —— 这是刻意的（见下）。
