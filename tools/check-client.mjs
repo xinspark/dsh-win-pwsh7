@@ -69,12 +69,23 @@ function elementsOf(node, type, found = []) {
 
 let dictionaries = { en: {}, zh: {} }
 const registered = []
+// A controller's `getSnapshot` has to return a stable reference until the state changes — React
+// compares with `Object.is` and re-renders forever otherwise. This fixture models that contract
+// (the old one returned a fresh literal per call, i.e. the very anti-pattern the identity assertion
+// further down exists to catch).
+let formSnapshotCache = null
+let formSnapshotKey = null
 const form = {
   status: 'ready',
   writable: true,
   value: { overridePath: '', installIfMissing: false },
   getSnapshot() {
-    return { status: this.status, writable: this.writable, value: this.value }
+    const key = `${this.status}|${this.writable}|${this.value.overridePath}|${this.value.installIfMissing}`
+    if (formSnapshotCache === null || formSnapshotKey !== key) {
+      formSnapshotKey = key
+      formSnapshotCache = { status: this.status, writable: this.writable, value: this.value }
+    }
+    return formSnapshotCache
   },
   subscribe() { return () => {} },
   async set() { return true },
@@ -232,6 +243,15 @@ check('the en dictionary carries no Chinese', () => {
   const cjk = en.match(/[\u4e00-\u9fff]/gu)
   assert.equal(cjk, null, `Chinese in the en dictionary: ${cjk === null ? '' : cjk.join('')}`)
 })
+check('both style blocks define the button, so it is styled wherever it renders', () => {
+  for (const name of ['CSS_CARD', 'CSS_DIAG']) {
+    const start = source.indexOf(`const ${name} = \``)
+    const body = source.slice(start, source.indexOf('`', start + 20))
+    assert.ok(start > 0 && /\.dw7-btn\{/u.test(body),
+      `${name} does not define .dw7-btn, so a button rendered without the card is unstyled`)
+  }
+})
+
 check('every t() key the client asks for exists in both dictionaries', () => {
   const used = [...source.matchAll(/\bt\('([a-z0-9_]+)'/giu)].map((match) => match[1])
   assert.ok(used.length > 10, `only ${used.length} t() keys found — the extraction is probably wrong`)
@@ -240,6 +260,78 @@ check('every t() key the client asks for exists in both dictionaries', () => {
       assert.ok(typeof dictionaries[locale][key] === 'string', `${key} is missing from the ${locale} dictionary`)
     }
   }
+})
+
+storeCalls.length = 0
+card({ view: 'page' })
+const servedFirst = storeCalls.slice()
+storeCalls.length = 0
+card({ view: 'page' })
+const servedSecond = storeCalls.slice()
+
+check('the served-controller callbacks keep a stable identity too', () => {
+  assert.ok(servedFirst.length > 0 && servedSecond.length > 0, 'the card never subscribed to a snapshot')
+  assert.ok(Object.is(servedFirst[0].subscribe, servedSecond[0].subscribe),
+    'subscribe changed identity between renders — React would re-subscribe on every render')
+  assert.ok(Object.is(servedFirst[0].getSnapshot(), servedFirst[0].getSnapshot()),
+    'getSnapshot returned a fresh object — React would re-render forever')
+})
+
+// --- The Remote flow: the only path that talks to the Host ---------------------------------
+// Nothing drove it before — the stubs made effects and writes no-ops — so `refresh()` (mount the
+// namespace, call the endpoint, unwrap the envelope, publish a snapshot) never executed here, and
+// that is exactly where the client half meets the Host. The action's own onClick is the seam: it is
+// what a user clicks.
+let remoteAnswer = () => Promise.resolve({ ok: true, value: { report: 'HOST REPORT' } })
+const remoteCalls = []
+const remoteCtx = {
+  ...ctx,
+  get: (key) => {
+    if (key === 'remote') {
+      return {
+        $mount: (spec) => {
+          remoteCalls.push(spec.package)
+          return Promise.resolve({ mounted: true })
+        },
+      }
+    }
+    if (key === 'remote.dsh-win-pwsh7') {
+      return {
+        status: () => {
+          remoteCalls.push('status')
+          return remoteAnswer()
+        },
+      }
+    }
+    return undefined
+  },
+}
+const remoteBefore = registered.length
+client.apply(remoteCtx)
+const remoteParts = registered.slice(remoteBefore)
+const remoteAction = remoteParts.find((item) => item.registration.name === 'plugins.detail.actions')?.component
+const remoteSection = remoteParts.find((item) => item.registration.name === 'plugins.detail.section')?.component
+const remoteButton = elementsOf(remoteAction({ subject: { pkg: 'dsh-win-pwsh7' } }), 'button')[0]
+assert.ok(remoteButton !== undefined, 'the re-detect action rendered no button')
+
+remoteButton.props.onClick()
+await new Promise((resolve) => setTimeout(resolve, 0))
+const readyTexts = textsOf(remoteSection({ subject: { pkg: 'dsh-win-pwsh7' } }))
+
+check('the Remote flow mounts the namespace, calls the endpoint and renders its report', () => {
+  assert.deepEqual(remoteCalls, ['dsh-win-pwsh7', 'status'], `the flow called ${remoteCalls.join(', ')}`)
+  assert.ok(readyTexts.includes('HOST REPORT'),
+    `the report never reached the section: ${readyTexts.join(' | ').slice(0, 200)}`)
+})
+
+remoteAnswer = () => Promise.resolve({ ok: false, error: { code: 'E-NOT-AVAILABLE', message: 'not mounted' } })
+remoteButton.props.onClick()
+await new Promise((resolve) => setTimeout(resolve, 0))
+const failedTexts = textsOf(remoteSection({ subject: { pkg: 'dsh-win-pwsh7' } }))
+
+check('a failed Remote call is reported in the user language', () => {
+  assert.ok(failedTexts.some((text) => text.startsWith('检测失败：')),
+    `the failure was not localized: ${failedTexts.join(' | ').slice(0, 200)}`)
 })
 
 // --- Verdict ------------------------------------------------------------------------------

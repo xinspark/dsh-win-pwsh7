@@ -89,6 +89,8 @@ window.__ModuleLoader__.load({
       form_loading: 'Loading configuration…',
       form_unavailable: 'Configuration is not available right now.',
       unwritable: 'The Host is not accepting writes for this row.',
+      error_remote_unavailable: 'the Remote service is not available in this deployment',
+      error_endpoint_missing: 'the status endpoint is not mounted',
     }
     const DICT_ZH = {
       diagnostics_title: 'PowerShell 7 状态',
@@ -110,6 +112,8 @@ window.__ModuleLoader__.load({
       form_loading: '配置读取中…',
       form_unavailable: '配置暂不可用。',
       unwritable: 'Host 当前不接受该行的写入。',
+      error_remote_unavailable: '本部署没有可用的 Remote 服务',
+      error_endpoint_missing: '状态端点未挂载',
     }
 
     const CSS_CARD = `
@@ -136,6 +140,9 @@ window.__ModuleLoader__.load({
 `
 
     const CSS_DIAG = `
+/* The Re-detect button lives in this section's own slot group ({@link RedetectAction}) but the
+   page it renders on may never render the configure card, so the button rules are defined here as
+   well as in CSS_CARD: a style element only applies while it is mounted. */
 .dw7-diag{display:flex;flex-direction:column;gap:8px;padding:16px;background:var(--dsw-alias-bg-layer-1);border:1px solid var(--dsw-alias-border-l1);border-radius:8px;min-width:0;}
 .dw7-diag-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;}
 .dw7-diag-title{color:var(--dsw-alias-label-primary);font-size:14px;font-weight:600;}
@@ -143,6 +150,12 @@ window.__ModuleLoader__.load({
 .dw7-diag-report{margin:0;padding:12px;background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l1);border-radius:6px;color:var(--dsw-alias-label-primary);font-size:12px;line-height:1.55;white-space:pre-wrap;word-break:break-all;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;max-height:320px;overflow:auto;}
 .dw7-diag-err{color:var(--dsw-alias-state-error-primary);font-size:12px;}
 .dw7-diag-idle{color:var(--dsw-alias-label-secondary);font-size:12px;}
+/* The Re-detect button belongs to this section's slot group, and the page it renders on may never
+   render the configure card — so the button rules are defined here as well as in CSS_CARD, because
+   a style element only applies while it is mounted. */
+.dw7-btn{background:var(--dsw-alias-brand-primary);color:var(--dsw-alias-bg-base);border:none;border-radius:6px;padding:6px 14px;font-size:13px;cursor:pointer;}
+.dw7-btn:disabled{opacity:.55;cursor:default;}
+.dw7-btn-ghost{background:transparent;color:var(--dsw-alias-label-secondary);border:1px solid var(--dsw-alias-border-l1);}
 `
 
     return {
@@ -185,7 +198,7 @@ window.__ModuleLoader__.load({
         async function callStatus() {
           const remote = ctx.get('remote')
           if (!remote || typeof remote.$mount !== 'function') {
-            throw new Error('the Remote service is not available in this deployment')
+            throw new Error(t('error_remote_unavailable'))
           }
           if (mounting === null) {
             mounting = remote.$mount({ package: PACKAGE, descriptors: descriptorsFor(PACKAGE, ['status']) })
@@ -197,7 +210,7 @@ window.__ModuleLoader__.load({
           await mounting
           const ns = ctx.get('remote.' + PACKAGE) || remote[PACKAGE]
           if (!ns || typeof ns.status !== 'function') {
-            throw new Error('the dsh-win-pwsh7 status endpoint is not mounted')
+            throw new Error(t('error_endpoint_missing'))
           }
           return unwrapRemoteResult(await ns.status({}))
         }

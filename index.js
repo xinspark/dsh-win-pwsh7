@@ -130,10 +130,26 @@ const INSTALL_KIND = 'pwsh7'
 const INSTALL_STALL_MS = 10 * 60 * 1000
 
 /**
+ * Read a millisecond override from the environment, refusing anything that is not a finite,
+ * non-negative number. A malformed value used to become `NaN`, which `setInterval`/`setTimeout`
+ * coerce to 0 — a busy loop that spawns probes back to back. Zero itself is legitimate (it means
+ * "as soon as possible", which the gate relies on).
+ * @param name - the environment variable name.
+ * @param fallback - the value to use when it is absent or unusable.
+ * @returns a finite, non-negative number of milliseconds.
+ */
+function envMs(name, fallback) {
+  const raw = process.env[name]
+  if (raw === undefined || raw === '') return fallback
+  const value = Number(raw)
+  return Number.isFinite(value) && value >= 0 ? value : fallback
+}
+
+/**
  * How often the background job refreshes its progress line, and how often it re-reads winget's
  * diagnostic log. The environment override exists so the gate can run both fast.
  */
-const INSTALL_TICK_MS = Number(process.env.DSH_WIN_PWSH7_TICK_MS ?? 15000)
+const INSTALL_TICK_MS = envMs('DSH_WIN_PWSH7_TICK_MS', 15000)
 
 /**
  * How long to keep re-probing after winget exits, before believing a failed exit.
@@ -146,7 +162,16 @@ const INSTALL_TICK_MS = Number(process.env.DSH_WIN_PWSH7_TICK_MS ?? 15000)
 const RECHECK_ATTEMPTS = 8
 
 /** Delay between those re-probes; the environment override exists so the gate can run them fast. */
-const RECHECK_DELAY_MS = Number(process.env.DSH_WIN_PWSH7_RECHECK_MS ?? 15000)
+const RECHECK_DELAY_MS = envMs('DSH_WIN_PWSH7_RECHECK_MS', 15000)
+
+/**
+ * How long an **inline** install may block before the caller reports "still running" instead of
+ * waiting. Activation gets a short grace — the host is starting and must not be held — while a
+ * caller who asked for the install by hand gets longer. Without a bound, the winget→Store handoff
+ * on a metered connection never returns at all (measured), which used to hang activation outright.
+ */
+const ACTIVATION_INSTALL_GRACE_MS = envMs('DSH_WIN_PWSH7_ACTIVATION_GRACE_MS', 15 * 1000)
+const INLINE_INSTALL_GRACE_MS = envMs('DSH_WIN_PWSH7_INLINE_GRACE_MS', 120 * 1000)
 
 /** The profile patch id whose config Desktop's generator copies into the live row. */
 const SOURCE_ROW_ID = 'pwsh-sandbox'
@@ -227,6 +252,12 @@ const HINT_SECTION = 'tool:pwsh-runtime'
  * Written by {@link renderStatus} (the activation sweep, every tool call, and the plugin
  * page's Re-detect all pass through it) and read by the section thunk at assembly time, so
  * it follows a configuration change without a restart. Empty until a runtime is known.
+ */
+/**
+ * Module-level by design: this plugin is one executor row in one host process, and the tools read
+ * what the last `apply` recorded. Two applications in one process — a second row, or a hot reload —
+ * would share this state and the newest one wins; moving it into the apply scope is the fix if that
+ * ever becomes a real deployment. Recorded as backlog rather than refactored blind before a release.
  */
 let runtimeNote = ''
 
@@ -418,14 +449,23 @@ class Pwsh7Dispatch extends Service {
 async function activationSweep(ctx, config) {
   const status = await detect(ctx, config)
   if (config?.installIfMissing === true && status.chosen === undefined) {
-    ctx.logger?.info?.('dsh-win-pwsh7: installIfMissing is enabled and no ordinary PowerShell 7 exists — installing from the Store')
-    const result = await installViaWinget(ctx)
+    // The connection cost is read here too, and for the same reason as in `runInstall`: on a
+    // metered connection that single setting is the whole explanation. The install itself is given
+    // a short grace rather than being awaited — see ACTIVATION_INSTALL_GRACE_MS.
+    const metered = await meteredWarning(ctx)
+    const detail = (extra) => [metered, extra].filter((part) => part !== undefined).join(' ')
+    ctx.logger?.info?.('dsh-win-pwsh7: installIfMissing is enabled and no ordinary PowerShell 7 exists — starting the Microsoft Store install')
+    const result = await installViaWinget(ctx, ACTIVATION_INSTALL_GRACE_MS)
+    if (result.pending === true) {
+      ctx.logger?.warn?.('dsh-win-pwsh7: %s', detail(result.detail))
+      return renderStatus(ctx, config, { installAttempt: { ok: false, detail: detail(result.detail) } })
+    }
     // The exit code is evidence, not a verdict: the Store can finish after winget has exited,
     // so the sweep re-probes for a bounded while exactly as the background job does.
     const after = await awaitRuntime(ctx, config)
     const installAttempt = after.chosen === undefined
-      ? { ok: false, detail: `${result.detail}; no usable PowerShell 7 appeared after re-probing` }
-      : { ok: true, detail: result.detail }
+      ? { ok: false, detail: detail(`${result.detail}; no usable PowerShell 7 appeared after re-probing`) }
+      : { ok: true, detail: detail(result.detail) }
     return renderStatus(ctx, config, { installAttempt })
   }
   return renderStatus(ctx, config, { status })
@@ -475,9 +515,14 @@ async function renderStatus(ctx, config, options = {}) {
   for (const row of rows) lines.push(`  ${row.text}`)
   lines.push('')
 
-  const effective = rows.find((row) => row.version !== undefined)
+  const enabled = rows.filter((row) => row.disabled !== true && row.options?.disabled !== true)
+  const effective = enabled.find((row) => row.version !== undefined)
   if (effective !== undefined) {
     lines.push(`The pwsh tool currently runs on PowerShell ${effective.version} via row ${effective.id}.`)
+    const others = enabled.filter((row) => row !== effective && row.version !== undefined)
+    if (others.length > 0) {
+      lines.push(`Other enabled rows (${others.map((row) => row.id).join(', ')}) also report a runtime; this reading follows the row order above.`)
+    }
     if (effective.origin === 'store-alias') {
       lines.push('That pin is the version-stable Store family alias: its directory carries no version, so Store')
       lines.push('updates do not move it, and the ACL sandbox still confines what it runs. Nothing to configure.')
@@ -558,7 +603,14 @@ async function runInstall(ctx, config, exec) {
 
   const jobs = ctx.get('jobs')
   if (jobs === undefined || typeof jobs.start !== 'function') {
-    const result = await installViaWinget(ctx)
+    const result = await installViaWinget(ctx, INLINE_INSTALL_GRACE_MS)
+    if (result.pending === true) {
+      return [
+        ...warning,
+        'No background-job registry is composed here, so the install ran inline and could not report progress.',
+        result.detail,
+      ].join('\n')
+    }
     const after = await awaitRuntime(ctx, config)
     return [
       ...warning,
@@ -571,7 +623,7 @@ async function runInstall(ctx, config, exec) {
   try {
     id = jobs.start(installJobSpec(ctx, config, exec))
   } catch (error) {
-    const result = await installViaWinget(ctx)
+    const result = await installViaWinget(ctx, INLINE_INSTALL_GRACE_MS)
     const after = await awaitRuntime(ctx, config)
     return [
       ...warning,
@@ -694,8 +746,9 @@ function installJobSpec(ctx, config, exec) {
               ? { ok: true, detail: 'winget reported success' }
               : { ok: false, detail: `winget exited with code ${outcome.exitCode}${tail === undefined ? '' : `: ${tail}`}` }
             // A failed exit is evidence, not a verdict: re-probe for a bounded while, because the
-            // runtime can appear after winget has already exited (see RECHECK_ATTEMPTS).
-            const after = await awaitRuntime(ctx, config, job)
+            // runtime can appear after winget has already exited (see RECHECK_ATTEMPTS). The cancel
+            // probe stops that loop too — `job_kill` during the re-probe used to be ignored.
+            const after = await awaitRuntime(ctx, config, job, () => cancelled)
             const verdict = await installVerdict(ctx, config, result, after)
             job.append(`\n${verdict.join('\n')}\n`)
             return {
@@ -723,14 +776,19 @@ function installJobSpec(ctx, config, exec) {
  * @param ctx - the row's Host context.
  * @param config - the resolved row configuration.
  * @param job - the job handle, for progress reporting.
+ * @param isCancelled - consulted before every probe, so a `job_kill` during the re-probe stops it.
  * @returns the first detection that found a candidate, or the last one.
  */
-async function awaitRuntime(ctx, config, job) {
+async function awaitRuntime(ctx, config, job, isCancelled) {
   let result = await detect(ctx, config)
   for (let attempt = 1; result.chosen === undefined && attempt <= RECHECK_ATTEMPTS; attempt += 1) {
+    if (isCancelled?.() === true) break
     job?.updateProgress(`winget exited; re-checking whether the install lands anyway (${attempt}/${RECHECK_ATTEMPTS})`)
     // Not unref'd: this await is the work, and an unref'd timer lets the loop exit under it.
     await new Promise((resolve) => { setTimeout(resolve, RECHECK_DELAY_MS) })
+    // Checked again after the wait: a cancel that lands *during* it must not be followed by one more
+    // probe, which is what "stop the loop" has to mean.
+    if (isCancelled?.() === true) break
     result = await detect(ctx, config)
   }
   return result
@@ -1064,12 +1122,38 @@ function spawnWingetProcess(ctx) {
 }
 
 /**
- * The inline install, used where no job registry is composed (and by the activation sweep's
- * `installIfMissing`). The exit code alone never counts as success — the caller re-validates.
- * @param ctx - the row's Host context.
- * @returns `{ ok, detail }` describing what happened; winget output is only supporting detail.
+ * Wait for a subprocess, but only for `graceMs`. `undefined` means it is still running, and the
+ * caller reports exactly that — the alternative (waiting) is what hung activation on a metered
+ * connection, because the winget→Store handoff waits indefinitely there and logs nothing.
+ * @param handle - the live subprocess handle.
+ * @param graceMs - how long to wait; omitted means "wait for it".
+ * @returns the outcome, or `undefined` on timeout.
  */
-async function installViaWinget(ctx) {
+async function settledWithin(handle, graceMs) {
+  if (graceMs === undefined) return await handle.done
+  let timer
+  try {
+    return await Promise.race([
+      handle.done,
+      new Promise((resolve) => {
+        timer = setTimeout(() => resolve(undefined), graceMs)
+        timer.unref?.()
+      }),
+    ])
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/**
+ * The inline install, used where no job registry is composed (and by the activation sweep's
+ * `installIfMissing`). The exit code alone never counts as success — the caller re-validates —
+ * and an install that outlives its grace is reported as still running rather than blocking.
+ * @param ctx - the row's Host context.
+ * @param graceMs - how long this call may block; omitted means "wait for winget".
+ * @returns `{ ok, detail, pending? }`; winget output is only supporting detail.
+ */
+async function installViaWinget(ctx, graceMs) {
   let handle
   try {
     handle = spawnWingetProcess(ctx)
@@ -1078,7 +1162,14 @@ async function installViaWinget(ctx) {
   }
 
   try {
-    const outcome = await handle.done
+    const outcome = await settledWithin(handle, graceMs)
+    if (outcome === undefined) {
+      return {
+        ok: false,
+        pending: true,
+        detail: `winget is still running after ${Math.round(graceMs / 1000)}s; the install continues in the background`,
+      }
+    }
     if (outcome.exitCode === 0) return { ok: true, detail: 'winget reported success' }
     const tail = tailOf(handle.collected)
     return { ok: false, detail: `winget exited with code ${outcome.exitCode}${tail === undefined ? '' : `: ${tail}`}` }
@@ -1187,15 +1278,18 @@ async function executorRows(ctx) {
     if (!EXECUTOR_PACKAGES.has(entry?.options?.name)) continue
     const declared = entry.options?.config?.pwshPath
     const id = String(entry.options?.id)
+    // Carry the entry's disabled flag through: a disabled row does not run, so it must not be the
+    // row the report names as the runtime (and it is why `effectiveRuntime` filters on this).
+    const disabled = entry.disabled === true || entry.options?.disabled === true
     if (!isSet(declared)) {
-      rows.push({ id, pwshPath: undefined, text: `${id} : (pwshPath not set — the executor probes well-known locations itself)` })
+      rows.push({ id, disabled, pwshPath: undefined, text: `${id} : (pwshPath not set — the executor probes well-known locations itself)` })
       continue
     }
     const pwshPath = String(declared)
     const check = await validateRowPath(ctx, pwshPath)
     rows.push(check.usable
-      ? { id, pwshPath, version: check.version, probed: check.version, origin: check.origin, text: `${id} : pwshPath = ${pwshPath} (PowerShell ${check.version}, ${labelOf(check)})` }
-      : { id, pwshPath, probed: check.version, text: `${id} : pwshPath = ${pwshPath} (not a usable PowerShell 7: ${check.reason})` })
+      ? { id, disabled, pwshPath, version: check.version, probed: check.version, origin: check.origin, text: `${id} : pwshPath = ${pwshPath} (PowerShell ${check.version}, ${labelOf(check)})` }
+      : { id, disabled, pwshPath, probed: check.version, text: `${id} : pwshPath = ${pwshPath} (not a usable PowerShell 7: ${check.reason})` })
   }
   return rows
 }
@@ -1274,7 +1368,11 @@ function familyAliasOf(candidate) {
  * @returns the version string, or `undefined` when it cannot be established.
  */
 function effectiveRuntime(rows, status) {
-  const pinned = rows.find((row) => row.pwshPath !== undefined)
+  // A disabled row does not run, so it must not be the answer to "which runtime is this?" — and
+  // when several rows pin a path the first one is still the best available answer, which the report
+  // says out loud rather than implying it is the only pin.
+  const pinned = rows.find((row) => row.pwshPath !== undefined
+    && row.disabled !== true && row.options?.disabled !== true)
   if (pinned !== undefined) return pinned.probed
   const auto = status.auto
   if (auto === undefined) return undefined

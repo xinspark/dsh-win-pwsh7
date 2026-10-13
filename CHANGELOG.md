@@ -24,10 +24,12 @@ release published outside its author's machine, and it is the behaviour the READ
   rather than skipped on a machine that has the per-machine MSI — they cover job cancellation and
   both inline install fallbacks, and every assertion has been shown to fail under a deliberate
   mutation.
-- **Reviewed independently before release** (two Open Code Review passes against this commit): 21
-  findings were confirmed and fixed. The material ones: a gate that silently skipped half its
-  checks, an inline install path that skipped the bounded re-probe, a prompt-section hook that
-  mis-handled Node's builtin specifiers, a stall warning that had become unreachable, a cancelled
-  install job that kept working, and two invariants that broke on the first round of fixes (a
-  React store callback whose identity changed every render, and a re-probe assertion that passed by
-  ordering accident).
+- **Reviewed independently before release** — three Open Code Review passes, 36 findings triaged.
+  30 were confirmed and fixed. The material ones: a gate that silently skipped half its checks; all
+  inline install paths taking a single-shot verdict instead of the bounded re-probe; a stall warning
+  that had become unreachable; a cancelled job that kept working (twice — the re-probe loop was the
+  second half); an activation-time install that reported nothing because it waited forever; a report
+  that could name a disabled row as the runtime. 4 findings were refuted with citations (the harness's
+  own schema dialect, the ecosystem's client descriptor shape, the optional `jobs` service, and the
+  string-error envelope), and 1 is recorded as backlog: the module-level state a second application
+  in one process would share.

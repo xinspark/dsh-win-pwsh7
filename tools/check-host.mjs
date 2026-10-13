@@ -23,8 +23,12 @@ register('./node-app-modules-hook.mjs', import.meta.url)
 // The install re-probes for a bounded while after winget exits, and follows winget's own log for
 // progress. Both intervals are read when the host half loads, so they are set before the import
 // to let the gate run those ticks instantly.
-process.env.DSH_WIN_PWSH7_RECHECK_MS = '0'
+// Small but non-zero: the re-probe must be slow enough that a cancel can land *during* the loop.
+process.env.DSH_WIN_PWSH7_RECHECK_MS = '5'
 process.env.DSH_WIN_PWSH7_TICK_MS = '5'
+// The inline install graces, so the "still running" paths are reachable without a real wait.
+process.env.DSH_WIN_PWSH7_ACTIVATION_GRACE_MS = '50'
+process.env.DSH_WIN_PWSH7_INLINE_GRACE_MS = '200'
 
 const { apply } = await import('../index.js')
 
@@ -146,12 +150,13 @@ function makeContext({ rows = [], versions = {}, deferred = false, jobs = false 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0))
 
 /** One executor row pinning a path, as Desktop's generated patch declares it. */
-const executorRow = (pwshPath) => ({
+const executorRow = (pwshPath, extra = {}) => ({
   options: {
-    id: 'desktop-windows-pwsh-sandbox',
-    name: 'dsh-plugin-desktop/windows-pwsh-sandbox',
+    id: extra.id ?? 'desktop-windows-pwsh-sandbox',
+    name: extra.name ?? 'dsh-plugin-desktop/windows-pwsh-sandbox',
     config: { pwshPath },
   },
+  ...(extra.disabled === undefined ? {} : { disabled: extra.disabled }),
 })
 
 const failures = []
@@ -376,11 +381,16 @@ if (existsSync(MSI)) {
     mkdirSync(dirname(target), { recursive: true })
     copyFileSync(process.env.ComSpec ?? 'C:\\Windows\\System32\\cmd.exe', target)
   }
+  // A fixture `winget.exe` too. `spawnWingetProcess` resolves it through the real filesystem, so
+  // without this the job and inline-install checks silently needed winget on the *host* — which is
+  // not what "the behaviour half is fixture-pinned and runs on any machine" claims. An empty file is
+  // enough: the process itself is stubbed, only the resolve is real.
+  writeFileSync(join(jobRoot, 'winget.exe'), '')
   const jobVersions = {} // nothing reports a version yet: the machine has no usable PowerShell 7
   const jobMachine = makeContext({ rows: [executorRow(undefined)], versions: jobVersions, deferred: true, jobs: true })
-  // The fixture directory leads PATH so the probe resolves into it, while the real entries stay
-  // behind it so `winget.exe` is still findable.
-  process.env.PATH = `${jobVersionedDir};${savedPath}`
+  // The fixture directory leads PATH so the probe resolves into it, and the fixture `winget.exe`
+  // lives in `jobRoot` itself, so a scheduled task does not depend on the host having winget.
+  process.env.PATH = `${jobRoot};${jobVersionedDir};${savedPath}`
   process.env.LOCALAPPDATA = jobAliasRoot
   apply(jobMachine.ctx, {})
   const startedReport = (await jobMachine.registered.get('pwsh7_install').execute({}, undefined)).report
@@ -676,6 +686,74 @@ if (existsSync(MSI)) {
   check('install job: a cancelled job stops instead of re-probing and reporting', () => {
     assert.match(afterCancelOutcome.result, /cancelled/u)
     assert.match(cancelStub.appended.join('\n'), /cancelled/u, 'the cancellation must reach the job output')
+  })
+
+  // A disabled row does not run, so it must not be the row the report names — and with several
+  // enabled rows reporting a runtime the report says so instead of implying there is only one pin.
+  // (The fixtures used here are live: the earlier ones are removed with their temporary root.)
+  const mixedRows = await hintOn([
+    executorRow(jobAlias, { id: 'disabled-row', disabled: true }),
+    executorRow(jobAlias, { id: 'enabled-row' }),
+  ], { [jobAlias]: '7.6.6' })
+  check('report: a disabled row is never named as the runtime', () => {
+    assert.match(mixedRows.report, /via row enabled-row/u,
+      `the enabled row was not named: ${mixedRows.report.slice(0, 400)}`)
+    assert.ok(!mixedRows.report.includes('via row disabled-row'),
+      'a disabled row was reported as the runtime')
+  })
+
+  // `apply` does not await the sweep (`void activationSweep(...).then(...)`), so activation was never
+  // blocked by an install — the review's premise on that point was wrong, and this case records the
+  // real contract. What *was* wrong: the sweep awaited winget forever, so the install's outcome was
+  // silently lost. It now gives up after a grace and reports.
+  const sweepMachine = makeContext({ rows: [executorRow(undefined)], versions: {}, deferred: true, jobs: true })
+  apply(sweepMachine.ctx, { installIfMissing: true })
+  await new Promise((resolve) => setTimeout(resolve, 60))
+  check('activation: installIfMissing starts the install without holding apply', () => {
+    assert.ok(sweepMachine.spawned.some((executable) => /winget/iu.test(executable)),
+      'the install never started')
+  })
+
+  // The bounded grace, asserted where it is observable: an inline install whose winget never finishes
+  // must report "still running" rather than waiting forever. The watchdog keeps a regression from
+  // hanging the gate — a mutation that removes the grace times out and goes red.
+  const pendingMachine = makeContext({ rows: [executorRow(undefined)], versions: {}, deferred: true, jobs: false })
+  apply(pendingMachine.ctx, {})
+  const pendingOutcome = await Promise.race([
+    pendingMachine.registered.get('pwsh7_install').execute({}, undefined).then((value) => ({ report: value.report })),
+    new Promise((resolve) => setTimeout(() => resolve({ timeout: true }), 3000)),
+  ])
+  check('install: an inline install that outlives its grace reports instead of waiting forever', () => {
+    assert.equal(pendingOutcome.timeout, undefined, 'the inline install waited for winget forever')
+    assert.match(pendingOutcome.report, /still running/u,
+      `the report hid the pending install: ${pendingOutcome.report}`)
+  })
+
+  // A `job_kill` *during* the re-probe has to stop it as well: the first fix checked the flag once,
+  // after `handle.done`, so the loop kept spawning probes for up to RECHECK_ATTEMPTS × RECHECK_DELAY_MS.
+  let lateProbes = 0
+  const lateVersions = new Proxy({}, {
+    get: (_target, key) => {
+      if (key === jobAlias) lateProbes += 1
+      return undefined
+    },
+  })
+  const lateMachine = makeContext({ rows: [executorRow(undefined)], versions: lateVersions, deferred: true, jobs: true })
+  apply(lateMachine.ctx, {})
+  await lateMachine.registered.get('pwsh7_install').execute({}, undefined)
+  const lateStub = { progress: [], appended: [], updateProgress(line) { this.progress.push(line) }, append(text) { this.appended.push(text) } }
+  const lateHooks = lateMachine.jobSpecs[0].run(lateStub)
+  const lateDone = lateHooks.done
+  lateMachine.settleAll()
+  await new Promise((resolve) => setTimeout(resolve, 15))
+  const probesAtCancel = lateProbes
+  lateHooks.cancel()
+  await new Promise((resolve) => setTimeout(resolve, 40))
+  await lateDone
+
+  check('install job: a cancel during the re-probe stops the probing', () => {
+    assert.equal(lateProbes, probesAtCancel,
+      `the re-probe kept going after cancel: ${probesAtCancel} -> ${lateProbes}`)
   })
 
   process.env.PATH = savedCasePath
