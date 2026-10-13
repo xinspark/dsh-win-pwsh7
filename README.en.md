@@ -14,6 +14,25 @@ falling back to Windows PowerShell 5.1. Three legs, in priority order:
 **It does not ship PowerShell, and it does not write configuration.** Installing is always
 an explicit act (a tool you ask for, or a config key you set); it never uninstalls anything.
 
+## Installing this plugin
+
+```powershell
+# From GitHub (recommended: pinned to the tag, so a later push cannot change what is installed)
+dsh plugin --profile desktop add github:XinSpark/dsh-win-pwsh7#v0.12.1
+# replace `desktop` with the profile you use — `dsh plugin list` says which one that is
+```
+
+- **npm** (once published): `dsh plugin --profile desktop add dsh-win-pwsh7`
+- **Local development**: `npm pack`, then `dsh plugin --profile desktop add file:<absolute path to the .tgz>`
+
+Restart DSH afterwards, then check the runtime it reads on the plugin page (or by asking for
+`pwsh7_status`). To wire the executor, paste the profile patch the report prints into
+`~\.dsh\profiles\<profile>\cordis.patch.yml` and restart. **It never edits the executor's
+`pwshPath` for you** — that is deliberate (see below).
+
+This plugin is **pure JavaScript with no runtime dependencies**, for Windows: the host half only
+does meaningful work there, and the client half is an ordinary web card.
+
 ## Why it is needed
 
 The Desktop adapter resolves the PowerShell executable from well-known candidates plus
@@ -346,7 +365,8 @@ npm run check                                                     # green before
 # bump "version" in package.json, then:
 git add -A; git commit -m 'dsh-win-pwsh7 X.Y.Z: ...'
 git tag vX.Y.Z
-npm publish                        # `prepublishOnly` re-runs both gates and aborts on red
+git push origin main --tags     # GitHub first: the tag is what an install pins
+npm publish                     # `prepublishOnly` re-runs both gates and aborts on red
 ```
 
 `prepublishOnly` runs `npm run check`, so a red tree cannot be published; it needs the same

@@ -1,0 +1,4 @@
+# A Windows-first package whose files are written with LF endings: a clone (or a Windows checkout
+# with core.autocrlf=true) must not rewrite them into CRLF, because the gate fixtures and the
+# subprocess probe compare exact bytes and paths.
+* text=auto eol=lf

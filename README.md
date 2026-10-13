@@ -12,6 +12,21 @@
 
 > 本文是简体中文版；完整证据与出处（含官方文档链接、逐条实测记录）在 [README.en.md](README.en.md)。
 
+## 安装本插件
+
+```powershell
+# 从 GitHub 安装（推荐：锁定 tag，上游后续推送不会悄悄改变已装版本）
+dsh plugin --profile desktop add github:XinSpark/dsh-win-pwsh7#v0.12.1
+# desktop 换成你在用的 profile —— `dsh plugin list` 能看出来是哪个
+```
+
+- **npm**（发布后）：`dsh plugin --profile desktop add dsh-win-pwsh7`
+- **本地开发**：`npm pack`，然后 `dsh plugin --profile desktop add file:<生成的 .tgz 绝对路径>`
+
+装完**重启 DSH**，然后在插件页（或让模型调 `pwsh7_status`）看它读到的运行时；需要接线时，把报告里给出的 profile 补丁**整段**粘进 `~\.dsh\profiles\<profile>\cordis.patch.yml` 再重启。**它不会替你改执行器的 `pwshPath`** —— 这是刻意的（见下）。
+
+本插件**纯 JavaScript、零运行时依赖、Windows 专用**；宿主半只在 Windows 上做有意义的事，客户端半就是一张普通网页卡片。
+
 ## 为什么需要它
 
 Desktop 适配器按这个顺序解析 PowerShell 可执行文件：
@@ -204,7 +219,8 @@ npm run check                                                     # 先绿
 # 改 package.json 的 version，然后：
 git add -A; git commit -m 'dsh-win-pwsh7 X.Y.Z: ...'
 git tag vX.Y.Z
-npm publish                        # prepublishOnly 会重跑两套门，红了就中止发布
+git push origin main --tags     # GitHub 先发（tag 就是用户安装时锁定的版本）
+npm publish                     # prepublishOnly 会重跑两套门，红了就中止发布
 ```
 
 `prepublishOnly` 跑 `npm run check`，所以红的树发布不出去；它需要与本节相同的 `DSH_APP_DIR`。发布的内容是 `files` 白名单加上 `LICENSE`、`README.md`、`README.en.md`、`CHANGELOG.md` —— `npm pack --dry-run` 会打印准确清单，里面既没有产物也没有本机专属文件。
