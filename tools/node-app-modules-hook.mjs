@@ -12,13 +12,15 @@
 //   2. the nearest ancestor of this file, or of the working directory, that has
 //      `node_modules/@deepseek-ai/cordis` — which is how a plugin installed *inside* an
 //      installation (the npm layout) finds it with no configuration at all.
+// `DSH_APP_DIR` may also point at a DSH 2.0 install root or at `resources/app.asar`; the packed
+// shape is unpacked once into a temporary directory, because Node cannot resolve a path inside an
+// asar archive. `./dsh-app-modules.mjs` owns that rule.
 // When neither works, a bare import fails with a message that says which variable to set, instead
 // of reporting a confusing "cannot find package".
 
-import { existsSync } from 'node:fs'
 import { builtinModules } from 'node:module'
-import { dirname, join, parse } from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { pathToFileURL } from 'node:url'
+import { resolveAppModulesDir } from './dsh-app-modules.mjs'
 
 /**
  * Node's own modules are bare specifiers too when written without the `node:` prefix
@@ -26,22 +28,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
  */
 const BARE_BUILTINS = new Set(builtinModules)
 
-/** The first ancestor of `start` that carries the harness packages, or `undefined`. */
-function installationAbove(start) {
-  let directory = start
-  const root = parse(directory).root
-  for (;;) {
-    if (existsSync(join(directory, 'node_modules', '@deepseek-ai', 'cordis', 'package.json'))) {
-      return directory
-    }
-    if (directory === root) return undefined
-    directory = dirname(directory)
-  }
-}
-
-const APP_DIR = process.env.DSH_APP_DIR
-  ?? installationAbove(dirname(fileURLToPath(import.meta.url)))
-  ?? installationAbove(process.cwd())
+const APP_DIR = resolveAppModulesDir()
 
 const PARENT_URL = APP_DIR === undefined
   ? undefined
@@ -60,9 +47,9 @@ export async function resolve(specifier, context, nextResolve) {
   }
   if (PARENT_URL === undefined) {
     throw new Error(
-      `cannot resolve "${specifier}" for a standalone run: set DSH_APP_DIR to your DSH installation's ` +
-      'resources/app directory (the one whose node_modules holds @deepseek-ai/cordis), or run this from ' +
-      'inside that installation.',
+      `cannot resolve "${specifier}" for a standalone run: set DSH_APP_DIR to your DSH installation — ` +
+      'its install root, `resources/app` (unpacked builds), or `resources/app.asar` (DSH 2.0 and later) ' +
+      '— or run this from inside that installation.',
     )
   }
   return nextResolve(specifier, { ...context, parentURL: PARENT_URL })

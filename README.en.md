@@ -320,11 +320,17 @@ where the harness is: the hook that re-parents `@deepseek-ai/*` tries `DSH_APP_D
 nearest ancestor of the tools directory or the working directory that carries
 `node_modules/@deepseek-ai/cordis`. **In practice, set `DSH_APP_DIR`** — a plugin installed into a
 profile's `node_modules` has no harness packages beside it (measured: this profile's `node_modules`
-holds no `@deepseek-ai/*`), so discovery has nothing to find there. The client gate needs no such
-variable: it renders the browser half through its own stubs.
+holds no `@deepseek-ai/*`), so discovery has nothing to find there. Since DSH 2.0 the installation
+ships packed (`resources/app.asar`), and Node cannot resolve a path inside an asar archive, so the
+variable accepts any of three hand-offs: the install root, `resources/app` (an unpacked install), or
+`resources/app.asar` (a packed one) — `tools/dsh-app-modules.mjs` unpacks the tree once into a
+temporary directory (`dsh-app-modules-*`, reused per archive by size and mtime, carrying only
+`node_modules` and `package.json`), and the Host gate opens with
+`note — the harness packages come from an asar archive, unpacked for this run into …`. The client
+gate needs no such variable: it renders the browser half through its own stubs.
 
 ```powershell
-$env:DSH_APP_DIR = 'C:\Program Files\DSH Desktop\resources\app'
+$env:DSH_APP_DIR = 'C:\Program Files\DSH NEXT'   # the install root; resources/app or resources/app.asar also work
 npm run check
 ```
 

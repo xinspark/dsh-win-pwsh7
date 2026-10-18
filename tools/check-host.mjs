@@ -17,6 +17,21 @@ import { appendFileSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readF
 import { dirname, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import assert from 'node:assert/strict'
+import { resolveAppModulesDir } from './dsh-app-modules.mjs'
+
+// Resolve the installation here, in the main thread, so a missing or packed installation reports
+// once with a real path instead of failing inside the loader thread's own resolution. A DSH 2.0
+// install ships `resources/app.asar`, which Node cannot read; `./dsh-app-modules.mjs` unpacks it
+// into a temporary directory (once per archive) and hands the rest of this run a plain folder.
+const appModules = resolveAppModulesDir()
+if (appModules === undefined) {
+  console.error('note — no DSH installation found: set DSH_APP_DIR to the install root, resources/app, or resources/app.asar')
+} else {
+  if (appModules.includes('dsh-app-modules-')) {
+    console.log(`note — the harness packages come from an asar archive, unpacked for this run into ${appModules}`)
+  }
+  process.env.DSH_APP_DIR = appModules
+}
 
 register('./node-app-modules-hook.mjs', import.meta.url)
 

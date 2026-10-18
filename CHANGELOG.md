@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.12.2 — the gates read a packed DSH 2.0 install
+
+DSH 2.0.19-next ships its packages inside `resources/app.asar`, and the Host gate could not find them
+there: Node resolves nothing inside an archive, and the sibling `app.asar.unpacked` holds only five
+packages (cordis is not among them), so the run ended in
+`ERR_MODULE_NOT_FOUND: Cannot find package '@deepseek-ai/cordis'`. The plugin's own halves were never
+affected — both load and run on 2.0.19-next — but nobody could re-run the gates on a 2.0 machine,
+which is exactly when they are wanted.
+
+- **`tools/dsh-app-modules.mjs` (new)** resolves the harness: `DSH_APP_DIR` first, then the nearest
+  ancestor of the tools directory or the working directory that carries
+  `node_modules/@deepseek-ai/cordis`. `DSH_APP_DIR` now accepts an install root, `resources/app`
+  (an unpacked install), or `resources/app.asar` (a packed one).
+- **A packed installation is unpacked once** into `%TEMP%\dsh-app-modules-<archive>-<size>-<mtime>` —
+  only `node_modules` and `package.json`, staged under `<cache>.<pid>` and renamed into place, reused
+  by later runs. Unpacking the real tree instead of re-implementing Node's resolution over the archive
+  is deliberate: a hand-written resolver can disagree with Node on `exports` maps, conditions, and
+  CJS/ESM, and that disagreement would show up as a green gate that proves nothing.
+- **The hook and the Host gate use it**, and the gate says where the packages came from. A machine
+  with no installation at all still fails the gate — with one actionable line naming the three
+  accepted hand-offs, instead of a bare `ERR_MODULE_NOT_FOUND`.
+- **Measured on 2.0.19-next**: 38 s cold (the unpack is most of it), 6 s on the cached second run,
+  both gates green.
+
 ## 0.12.1 — first public release
 
 `dsh-win-pwsh7` puts a real PowerShell 7 under the Harness `pwsh` tool on Windows. This is the first
