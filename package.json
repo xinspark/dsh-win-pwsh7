@@ -7,7 +7,7 @@
   "icon": "./icon.svg",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/XinSpark/dsh-win-pwsh7.git"
+    "url": "https://github.com/xinspark/dsh-win-pwsh7"
   },
   "homepage": "https://github.com/XinSpark/dsh-win-pwsh7#readme",
   "bugs": {
