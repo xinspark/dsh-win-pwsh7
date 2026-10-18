@@ -206,7 +206,7 @@ node tools/check-host.mjs      # 只跑宿主半
 node tools/check-client.mjs    # 只跑客户端半
 ```
 
-`tools/` 随包发布，所以装在别人机器上也能跑。有一件事要告诉钩子 harness 在哪：重新指向 `@deepseek-ai/*` 的钩子先试 `DSH_APP_DIR`，再试 tools 目录或工作目录的祖先里有没有 `node_modules/@deepseek-ai/cordis`。**实践上请设 `DSH_APP_DIR`** —— 装进 profile 的 `node_modules` 的插件旁边没有 harness 包（实测：本 profile 的 `node_modules` 里没有 `@deepseek-ai/*`），所以探测在那里找不到东西。DSH 2.0 起安装是打包的（`resources/app.asar`），而 Node 解析不进 asar 内部，所以这个变量接三种写法：安装根目录、`resources/app`（不打包的旧安装）、`resources/app.asar`（打包安装）—— `tools/dsh-app-modules.mjs` 会把整棵树一次性解到临时目录（`dsh-app-modules-*`，同一份包按大小与 mtime 复用，只解 `node_modules` 与 `package.json`），宿主门开局打印一句 `note — the harness packages come from an asar archive, unpacked for this run into …`。客户端门不需要这个变量：它用自己的桩渲染浏览器半。
+`tools/` 随包发布，所以装在别人机器上也能跑。有一件事要告诉钩子 harness 在哪：重新指向 `@deepseek-ai/*` 的钩子先试 `DSH_APP_DIR`，再试 tools 目录或工作目录的祖先里有没有 `node_modules/@deepseek-ai/cordis`。**实践上请设 `DSH_APP_DIR`** —— 装进 profile 的 `node_modules` 的插件旁边没有 harness 包（实测：本 profile 的 `node_modules` 里没有 `@deepseek-ai/*`），所以探测在那里找不到东西。DSH 2.0 起安装是打包的（`resources/app.asar`），而 Node 解析不进 asar 内部，所以这个变量接三种写法：安装根目录、`resources/app`（不打包的旧安装）、`resources/app.asar`（打包安装）—— `tools/dsh-app-modules.mjs` 会把整棵树一次性解到临时目录（`dsh-app-modules-*`，同一份包按大小与 mtime 复用，解 `node_modules`、`package.json`，以及桌面版把 harness 放进去的 `dsh/`），宿主门开局打印一句 `note — the harness packages come from an asar archive, unpacked for this run into …`。打包安装有两种内部布局：DSH 2.0.19-next 把 harness 放在归档根部；桌面版（`DeepSeek Harness.exe` 0.2.1）根部只放外壳（`node_modules/@deepseek-ai` 里仅 cordis、cosmokit、dsh-api-gateway、dsh-brand、dsh-deque、dsh-timeout、dsh-typert-protocol、schemastery 八个包），306 个 harness 包全在 `dsh/` 下。所以判定「这是 harness 根」用的是**同时**具备 `cordis` 与 `dsh-tools`，而不是只看 `cordis` —— 只看 `cordis` 会在桌面版上把外壳当成 harness，报出误导性的 `Cannot find package '@deepseek-ai/dsh-tools'`。客户端门不需要这个变量：它用自己的桩渲染浏览器半。
 
 `check-host.mjs` 离线地跑宿主半：加载 `index.js`、应用到一个桩上下文，然后按注册表自己的成功路径驱动两个工具（`execute` → 校验 → `render`）、5.1 与不存在路径的拒绝、两种商店形态（pin 家族别名必须读作稳定接线；pin 版本号目录必须被拒）、安装路径与"两条路"报告、以后台作业安装（调用必须在 winget 退出前返回；作业必须携带两条流、报告耗时、超过停滞阈值给出警告、并在落定时以重新校验过的结论收尾）、**作业取消**、**两条内联安装回退**、连接成本探测（命中计量必须点名；读不到必须沉默），以及提示段在 pin 了 PowerShell 7、pin 了 Windows PowerShell 5.1、pin 失效、运行时未知四种情况下的表现。行为那一半全部钉在夹具上（`PATH`、`LOCALAPPDATA`、`ProgramFiles`），所以在**任何**机器上都跑 —— 包括装了 per-machine MSI 的机器（早期版本正是在那里静默跳过了它）。两个**曾经坏过的不变量**各有自己的断言：停滞警告必须能与已知阶段同时出现；卡片的 `useSyncExternalStore` 回调必须在多次渲染间保持身份不变。它不启动任何进程。
 
@@ -217,12 +217,15 @@ node tools/check-client.mjs    # 只跑客户端半
 ```powershell
 $env:DSH_APP_DIR = 'C:\Program Files\DSH NEXT'   # 安装根目录；也可指向 resources/app 或 resources/app.asar
 npm run check                                                     # 先绿
-# 改 package.json 的 version，然后：
+# 改 package.json 的 version 与 CHANGELOG，然后：
 git add -A; git commit -m 'dsh-win-pwsh7 X.Y.Z: ...'
 git tag vX.Y.Z
-git push origin main --tags     # GitHub 先发（tag 就是用户安装时锁定的版本）
-npm publish                     # prepublishOnly 会重跑两套门，红了就中止发布
+git push origin main --tags     # tag 推上去就由 CI 发布，不需要本地 npm 登录
 ```
+
+推 tag 会触发 `.github/workflows/publish.yml`：它先校验 tag 与 `package.json` 的版本逐字相同，跑客户端门（宿主门需要 Windows 上的真实安装，所以在本机跑，`prepublishOnly` 因此被 `--ignore-scripts` 跳过），然后 `npm publish --access public --provenance` —— 认证走 **npm trusted publishing（OIDC）**，仓库里不存任何 npm 令牌，签名产物带 sigstore provenance。
+
+**provenance 有一条硬要求**：`package.json` 的 `repository.url` 必须与 GitHub 上下文逐字相同（`https://github.com/xinspark/dsh-win-pwsh7`）—— 写成 `git+https://github.com/XinSpark/dsh-win-pwsh7.git` 会被注册中心以 `E422 Unprocessable Entity … Error verifying sigstore provenance bundle` 拒绝，一个字节都不能差。
 
 `prepublishOnly` 跑 `npm run check`，所以红的树发布不出去；它需要与本节相同的 `DSH_APP_DIR`（指向 `resources/app.asar` 时，第一次会多花一次解包的时间）。发布的内容是 `files` 白名单加上 `LICENSE`、`README.md`、`README.en.md`、`CHANGELOG.md` —— `npm pack --dry-run` 会打印准确清单，里面既没有产物也没有本机专属文件。
 

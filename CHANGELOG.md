@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.12.3 — the gates read the desktop build's nested harness
+
+The desktop build (`DeepSeek Harness.exe` 0.2.1-rc.2) packs a different layout than 2.0.19-next: the
+archive root carries only a shell — `dsh`, `node_modules`, `lib`, `package.json`, `renderer` — and its
+`node_modules/@deepseek-ai` holds eight packages (cordis, cosmokit, dsh-api-gateway, dsh-brand,
+dsh-deque, dsh-timeout, dsh-typert-protocol, schemastery), while all 306 harness packages sit under
+`dsh/`. `0.12.2` accepted any root carrying `cordis`, so it picked the shell and the Host gate died
+with `ERR_MODULE_NOT_FOUND: Cannot find package '@deepseek-ai/dsh-tools'`.
+
+- **The harness is recognised by carrying both `cordis` and `dsh-tools`**, not `cordis` alone, and a
+  root or its `dsh`/`app` subdirectory is searched for it — `harnessAt()` in
+  `tools/dsh-app-modules.mjs`.
+- **The unpack now also takes `dsh/`**, so a packed desktop archive yields `<cache>\dsh`, and the
+  `note — the harness packages come from an asar archive, unpacked for this run into …` line names it.
+- **A cache created by an older release is not trusted**: it is reused only when the full harness is
+  inside it, so upgrading the plugin repairs the stale unpack instead of failing again.
+- **Measured**: new desktop install 30 s cold / 6 s cached, previous 2.0.19-next install 6 s cached,
+  both gates green; no installation at all still prints the actionable note and exits 1.
+- **The READMEs now describe all three layouts** and the "Releasing" sections explain that the tag
+  publishes through CI (trusted publishing, OIDC) and that provenance requires `repository.url` to be
+  byte-identical to the GitHub context.
+
 ## 0.12.2 — the gates read a packed DSH 2.0 install
 
 DSH 2.0.19-next ships its packages inside `resources/app.asar`, and the Host gate could not find them

@@ -324,10 +324,18 @@ holds no `@deepseek-ai/*`), so discovery has nothing to find there. Since DSH 2.
 ships packed (`resources/app.asar`), and Node cannot resolve a path inside an asar archive, so the
 variable accepts any of three hand-offs: the install root, `resources/app` (an unpacked install), or
 `resources/app.asar` (a packed one) — `tools/dsh-app-modules.mjs` unpacks the tree once into a
-temporary directory (`dsh-app-modules-*`, reused per archive by size and mtime, carrying only
-`node_modules` and `package.json`), and the Host gate opens with
-`note — the harness packages come from an asar archive, unpacked for this run into …`. The client
-gate needs no such variable: it renders the browser half through its own stubs.
+temporary directory (`dsh-app-modules-*`, reused per archive by size and mtime, carrying
+`node_modules`, `package.json` and the `dsh/` directory a desktop build keeps its harness in), and
+the Host gate opens with
+`note — the harness packages come from an asar archive, unpacked for this run into …`. A packed
+installation comes in two internal layouts: DSH 2.0.19-next keeps the harness at the archive root,
+while the desktop build (`DeepSeek Harness.exe` 0.2.1) keeps a shell there — its
+`node_modules/@deepseek-ai` holds eight packages (cordis, cosmokit, dsh-api-gateway, dsh-brand,
+dsh-deque, dsh-timeout, dsh-typert-protocol, schemastery) — and puts all 306 harness packages under
+`dsh/`. The harness root is therefore recognised by carrying **both** `cordis` and `dsh-tools`, not
+`cordis` alone: the weaker test mistakes the shell for the harness and reports the misleading
+`Cannot find package '@deepseek-ai/dsh-tools'`. The client gate needs no such variable: it renders
+the browser half through its own stubs.
 
 ```powershell
 $env:DSH_APP_DIR = 'C:\Program Files\DSH NEXT'   # the install root; resources/app or resources/app.asar also work
@@ -370,17 +378,27 @@ must stay intact.
 ```powershell
 $env:DSH_APP_DIR = 'C:\Program Files\DSH Desktop\resources\app'   # the host gate needs this
 npm run check                                                     # green before anything else
-# bump "version" in package.json, then:
+# bump "version" in package.json and write the CHANGELOG entry, then:
 git add -A; git commit -m 'dsh-win-pwsh7 X.Y.Z: ...'
 git tag vX.Y.Z
-git push origin main --tags     # GitHub first: the tag is what an install pins
-npm publish                     # `prepublishOnly` re-runs both gates and aborts on red
+git push origin main --tags     # the tag publishes: no local npm login needed
 ```
 
-`prepublishOnly` runs `npm run check`, so a red tree cannot be published; it needs the same
-`DSH_APP_DIR` this section sets. What ships is the `files` allowlist plus `LICENSE`, `README.md`,
-`README.en.md` and `CHANGELOG.md` — `npm pack --dry-run` prints the exact list, and it holds no
-artifact or machine-specific file.
+Pushing the tag runs `.github/workflows/publish.yml`: it refuses to continue unless the tag is
+byte-identical to `v$(package.json version)`, runs the client gate (the Host gate needs a real
+Windows DSH installation, so it runs locally before tagging — which is why `--ignore-scripts` skips
+`prepublishOnly`), and then runs `npm publish --access public --provenance`. Authentication is npm
+**trusted publishing** over OIDC, so no npm token is stored in the repository and the published
+tarball carries a sigstore provenance attestation.
+
+**Provenance has one hard requirement**: `package.json` `repository.url` must be byte-identical to
+the GitHub context (`https://github.com/xinspark/dsh-win-pwsh7`). Writing
+`git+https://github.com/XinSpark/dsh-win-pwsh7.git` gets the publish rejected with
+`E422 Unprocessable Entity … Error verifying sigstore provenance bundle` — not one character may
+differ.
+
+What ships is the `files` allowlist plus `LICENSE`, `README.md`, `README.en.md` and `CHANGELOG.md` —
+`npm pack --dry-run` prints the exact list, and it holds no artifact or machine-specific file.
 
 ## License
 
