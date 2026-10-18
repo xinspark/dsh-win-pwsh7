@@ -1,0 +1,46 @@
+name: publish
+
+# Triggered by the tag the release is cut from, so a published version always has a commit behind it.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  # npm trusted publishing: the runner mints a short-lived OIDC token, so no npm secret is stored.
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # No `registry-url` on purpose: setup-node would then write an `_authToken` line from
+      # NODE_AUTH_TOKEN, and an empty one makes npm fail authentication instead of taking the OIDC
+      # exchange. `publishConfig.registry` in package.json already pins the official registry.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Trusted publishing needs npm >= 11.5.1.
+      - run: npm install --global npm@latest
+
+      # A tag that disagrees with package.json would publish the wrong version under the wrong name.
+      - name: The tag matches package.json
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "the tag $GITHUB_REF_NAME does not match package.json $version"
+            exit 1
+          fi
+
+      # The client gate is the half that runs without a Harness installation: it renders the browser
+      # module against stubs. The Host half needs a real Windows DSH installation, so it runs on the
+      # author's machine before the tag is pushed — that is why `prepublishOnly` is skipped below.
+      - run: node tools/check-client.mjs
+
+      - run: npm pack --dry-run
+
+      - run: npm publish --access public --provenance --ignore-scripts
