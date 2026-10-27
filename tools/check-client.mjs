@@ -165,7 +165,7 @@ check('the card renders its labels from the dictionaries, never as bare config k
 check('the coexist row uses the native Switch primitive, not a custom checkbox', () => {
   const switches = elementsOf(cardTree, Switch)
   assert.equal(switches.length, 1, `expected one native switch, found ${switches.length}`)
-  assert.equal(switches[0].props.checked, false)
+  assert.equal(switches[0].props.checked, true)
   assert.equal(switches[0].props.label, dictionaries.zh.field_dshOpsCompat)
 })
 check('the card renders every hint in Chinese', () => {

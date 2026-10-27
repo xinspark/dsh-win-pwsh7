@@ -26,9 +26,9 @@
 
 ## 与 dsh-ops 共存
 
-0.2.2 过渡期**默认关闭**。开启后，检测到 dsh-ops 时，插件会向当前 profile 的 `cordis.patch.yml` 写入一条带标记的 `dsh-ops-compat` 覆盖，启用 dsh-ops 的 Compatibility 模式；重启 DSH 后官方 `pwsh` 恢复，`ops_bash` 保留。
+默认开启（0.2.2 已在多会话中验证）。检测到 dsh-ops 时，插件会向当前 profile 的 `cordis.patch.yml` 写入一条带标记的 `dsh-ops-compat` 覆盖，启用 dsh-ops 的 Compatibility 模式；重启 DSH 后官方 `pwsh` 恢复，`ops_bash` 保留。
 
-0.2.1 的桥接层在计算隐藏集合时读取了限制后的可见工具，会在隐藏/恢复之间振荡并卡死宿主；0.2.2 改为读取限制前的 `knownNames` / `restrictableNames`，并过滤 `tools.restrict()` 不接受的名字。该修复需要真实多会话启动验证后再考虑改回默认开启。
+0.2.1 的桥接层在计算隐藏集合时读取了限制后的可见工具，会在隐藏/恢复之间振荡并卡死宿主；0.2.2 改为读取限制前的 `knownNames` / `restrictableNames`，并过滤 `tools.restrict()` 不接受的名字。多会话验证通过后已恢复默认开启。
 
 桥接层还会在对应 OPS 工具可见时隐藏官方 `read` / `glob` / `grep`，以及重复的官方 `bash` / `pwsh_persistent`，让工具面保持 `pwsh` + `ops_bash`。关闭开关只移除本插件写入的那条覆盖；卸载清理是 best-effort，最多残留一条无害的兼容行。
 
@@ -69,7 +69,7 @@ dsh plugin --profile desktop add dsh-win-pwsh7
 | 键 | 默认 | 说明 |
 |---|---|---|
 | `overridePath` | 未设 | 优先级①的显式 `pwsh.exe`。必须能启动并报告 PowerShell 7+；未通过校验就回落到自动探测。**只影响探测与推荐，不接线**。 |
-| `dshOpsCompat` | `false` | 与 dsh-ops 共存（0.2.2 过渡期默认关闭）：自动写入并启用兼容模式，隐藏重复的官方工具，保留 `pwsh` + `ops_bash`。需要重启。 |
+| `dshOpsCompat` | `true` | 与 dsh-ops 共存（默认开启）：自动写入并启用兼容模式，隐藏重复的官方工具，保留 `pwsh` + `ops_bash`。需要重启。 |
 
 `overridePath` 是 `volatile()`：插件页配置区保存即生效；也可以写进 profile 补丁：
 
@@ -105,7 +105,7 @@ The executor resolves to the version-stable Store family alias: … Nothing to c
 
 ## 插件页
 
-插件页的状态区是原生卡片，显示状态、运行时和执行器路径，右上角有「重新检测」；配置区有 `overridePath` 和「与 dsh-ops 共存」开关（0.2.2 过渡期默认关闭）。
+插件页的状态区是原生卡片，显示状态、运行时和执行器路径，右上角有「重新检测」；配置区有 `overridePath` 和默认开启的「与 dsh-ops 共存」原生开关。
 
 ## 禁用或卸载
 

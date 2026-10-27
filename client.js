@@ -100,7 +100,7 @@ window.__ModuleLoader__.load({
       field_overridePath: 'PowerShell 7 path',
       overridePath_hint: 'Optional explicit pwsh.exe path (`overridePath`). Empty = auto-detect. It must spawn and report PowerShell 7 or newer; the Store family alias is accepted, while a version-numbered Store path is never pinned. This only changes what the plugin probes and recommends — it does not wire the pwsh tool. Use the patch in the status section for that.',
       field_dshOpsCompat: 'Coexist with dsh-ops',
-      dshOpsCompat_hint: 'Experimental. Keeps the native pwsh tool beside ops_bash by enabling dsh-ops Compatibility and hiding its duplicate official tools. Requires a DSH restart.',
+      dshOpsCompat_hint: 'On by default. Keeps the native pwsh tool beside ops_bash by enabling dsh-ops Compatibility and hiding its duplicate official tools. Requires a DSH restart.',
       save: 'Save',
       reset: 'Reset',
       saved: 'Saved {at}',
@@ -144,7 +144,7 @@ window.__ModuleLoader__.load({
       field_overridePath: 'PowerShell 7 路径',
       overridePath_hint: '可选的显式 pwsh.exe 路径（`overridePath`）。留空 = 自动探测。必须能启动并报告 PowerShell 7 及以上；Store 家族别名可用，版本号目录永不被 pin。这里只影响插件的探测与推荐，不会给 pwsh 工具接线；接线请用状态区里的补丁。',
       field_dshOpsCompat: '与 dsh-ops 共存',
-      dshOpsCompat_hint: '实验性。通过启用 dsh-ops 的 Compatibility 模式并隐藏重复的官方工具，让原生 pwsh 与 ops_bash 并存。需要重启 DSH。',
+      dshOpsCompat_hint: '默认开启。通过启用 dsh-ops 的 Compatibility 模式并隐藏重复的官方工具，让原生 pwsh 与 ops_bash 并存。需要重启 DSH。',
       save: '保存',
       reset: '重置',
       saved: '已保存 {at}',
@@ -422,7 +422,7 @@ window.__ModuleLoader__.load({
           const unavailable = snap.status === 'unavailable'
           const served = {
             overridePath: typeof snap.value?.overridePath === 'string' ? snap.value.overridePath : '',
-            dshOpsCompat: snap.value?.dshOpsCompat === true,
+            dshOpsCompat: snap.value?.dshOpsCompat !== false,
           }
           const values = draft ?? served
           const dirty = draft !== null && (values.overridePath !== served.overridePath || values.dshOpsCompat !== served.dshOpsCompat)

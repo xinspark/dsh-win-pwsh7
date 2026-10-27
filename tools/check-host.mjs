@@ -663,7 +663,7 @@ const compatMachine = makeContext({
     },
   },
 })
-apply(compatMachine.ctx, { dshOpsCompat: true })
+apply(compatMachine.ctx, {})
 await new Promise((resolve) => setTimeout(resolve, 50))
 const compatWritten = readFileSync(compatPatchPath, 'utf8')
 check('dsh-ops coexistence writes a marked compatibility override', () => {
@@ -711,7 +711,7 @@ const bridgeMachine = makeContext({
     'bash', 'pwsh', 'pwsh_persistent', 'ops_bash',
   ],
 })
-apply(bridgeMachine.ctx, { dshOpsCompat: true })
+apply(bridgeMachine.ctx, {})
 check('dsh-ops bridge hides duplicate official tools but keeps pwsh', () => {
   const deny = bridgeDenies.at(-1) ?? []
   for (const name of ['read', 'glob', 'grep', 'bash', 'pwsh_persistent']) {

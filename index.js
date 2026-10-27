@@ -58,13 +58,13 @@ export const inject = ['subprocess', 'tools', 'configEditor', 'systemPrompt']
  * - id: win-pwsh7
  *   config:
  *     overridePath: 'D:\tools\pwsh\pwsh.exe'   # priority ① — validated, must be an ordinary PowerShell 7+
- *     dshOpsCompat: false                         # opt-in until the bridge is verified live
+ *     dshOpsCompat: true                          # default; keeps pwsh beside dsh-ops ops_bash
  */
 export const Config = z.object({
   overridePath: z.string().volatile(),
-  // Opt-in for 0.2.2: the bridge froze the Host in 0.2.1, so it stays off until the fixed
-  // pre-restriction name source has been exercised on a real multi-session boot.
-  dshOpsCompat: z.boolean().default(false).volatile(),
+  // Default-on after the multi-session validation of the pre-restriction bridge. Turning it
+  // off removes the managed compatibility override; turning it on restores it.
+  dshOpsCompat: z.boolean().default(true).volatile(),
 })
 
 /**
@@ -523,13 +523,13 @@ let hostContext = null
 function readRowConfig(ctx, fallback) {
   const merged = {
     overridePath: typeof fallback?.overridePath === 'string' ? fallback.overridePath : undefined,
-    dshOpsCompat: fallback?.dshOpsCompat === true,
+    dshOpsCompat: fallback?.dshOpsCompat !== false,
   }
   try {
     const entry = ctx.configEditor.entries().find((candidate) => candidate?.options?.name === 'dsh-win-pwsh7')
     const values = entry?.options?.config
     if (isSet(values?.overridePath)) merged.overridePath = String(values.overridePath)
-    if (values?.dshOpsCompat !== undefined) merged.dshOpsCompat = values.dshOpsCompat === true
+    if (values?.dshOpsCompat !== undefined) merged.dshOpsCompat = values.dshOpsCompat !== false
   } catch { /* fall back to the captured config */ }
   return merged
 }
@@ -618,7 +618,7 @@ async function ensureDshOpsCompat(ctx, config) {
   if (directory === undefined) return { changed: false, state: 'no-profile' }
   const path = join(directory, 'cordis.patch.yml')
   const installed = await dshOpsInstalled(ctx)
-  const enabled = config?.dshOpsCompat === true
+  const enabled = config?.dshOpsCompat !== false
   if (!installed || !enabled) {
     return { changed: rewriteProfilePatch(path, (text) => withoutCompatBlock(text)), state: installed ? 'disabled' : 'not-installed' }
   }
@@ -752,7 +752,7 @@ function mountDshOpsBridge(ctx, current) {
     if (stopped || mutating) return
     mutating = true
     try {
-      const enabled = current()?.dshOpsCompat === true
+      const enabled = current()?.dshOpsCompat !== false
       if (!enabled) {
         for (const entry of entries.values()) lift(entry)
         entries.clear()
