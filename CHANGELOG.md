@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.16.3 — link the dsh-ops companion
+
+- The completed script-install recommendation now includes the companion repository link:
+  https://github.com/T-Auto/dsh-ops.
+- Both READMEs link the same repository.
+
 ## 0.16.2 — recommend the companion only after the script install completes
 
 - 0.16.1 appended the dsh-ops recommendation to every healthy `pwsh7_status` report. That was too
