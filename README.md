@@ -8,13 +8,27 @@
 2. **校验**显式路径（`pwsh7_status` 的 `path` 参数）；
 3. **安装**：脚本安装（`pwsh7_install` 打开 Microsoft Store 页面并点击安装）或手动安装（Win+R 打开同一个 Store 链接）。**没有启动时自动安装。**
 
-启用本插件期间，`pwsh` 工具**只在实际执行器解析到 PowerShell 7+ 时才放行**；否则每次调用在 dispatch 之前被 `ctx.tools.guard` 拒绝，错误文案给用户三条路：**配置已装的 PowerShell 7 / 安装 / 禁用插件**，并且不会启动任何 PowerShell 进程。禁用插件即恢复默认运行时，插件仍然不写 `pwshPath`。
+启用本插件期间，`pwsh` 工具**只在实际执行器解析到 PowerShell 7+ 时才放行**；否则每次调用在 dispatch 之前被 `ctx.tools.guard` 拒绝，错误文案给用户三条路：**配置已装的 PowerShell 7 / 安装 / 禁用插件**，并且不会启动任何 PowerShell 进程。禁用插件即移除 gate，之后由默认执行器自行选择运行时，插件仍然不写 `pwshPath`。
+
+## 验证环境
+
+- Windows 10/11。
+- 已在 DSH **0.2.1-rc.3** 上验证（见 `package.json` 的 `dsh.verifiedAgainst`）。
+- 脚本安装需要 Microsoft Store 可用；手动安装只需要能打开 Store 页面。
+- 不需要管理员权限。
+
+## 它不做什么
+
+- 不在启动时自动安装。
+- 不写执行器的 `pwshPath`，也不修改 profile 补丁。
+- 不卸载由 Store 安装的 PowerShell 7。
+- 不做 VPN 自动检测，也不做计量连接预检。
 
 ## 安装本插件
 
 ```powershell
 # 从 GitHub 安装（推荐锁定 tag）
-dsh plugin --profile desktop add github:XinSpark/dsh-win-pwsh7#v0.16.7
+dsh plugin --profile desktop add github:XinSpark/dsh-win-pwsh7#v0.2.0
 # 或 npm
 dsh plugin --profile desktop add dsh-win-pwsh7
 ```
@@ -56,8 +70,6 @@ dsh plugin --profile desktop add dsh-win-pwsh7
     overridePath: 'D:\tools\pwsh\pwsh.exe'
 ```
 
-插件没有启动时自动安装。
-
 ## 推荐搭配
 
 脚本安装完成后，作业结果会包含一条**给模型的指令**：必须向用户推荐搭配 **dsh-ops**（[https://github.com/T-Auto/dsh-ops](https://github.com/T-Auto/dsh-ops)）插件使用，效果更佳；由模型询问用户是否安装，**不得未经同意自动安装**。安装命令：
@@ -69,6 +81,8 @@ dsh plugin --profile <profile> add dsh-ops
 推荐只出现在脚本安装完成的作业结果里；`pwsh7_status` 和手动安装不会反复推荐。
 
 ## 报告示例
+
+`pwsh7_status` 返回下面的文本报告；插件页把同一份状态渲染成卡片，不直接铺开整段文本。
 
 ```
 Executor rows:
@@ -82,7 +96,19 @@ The executor resolves to the version-stable Store family alias: … Nothing to c
 
 ## 插件页
 
-状态区显示当前运行时、状态和执行器路径，标题旁有「重新检测」；配置区只有 `overridePath` 一项。
+插件页的状态区是原生卡片，显示状态、运行时和执行器路径，右上角有「重新检测」；配置区只有 `overridePath`。
+
+## 禁用或卸载
+
+禁用插件只移除 `pwsh` 的 gate 和插件页，不会卸载 PowerShell 7。只要机器上仍有 `pwsh.exe`，默认执行器仍会优先运行它（通常是 Store 版 PowerShell 7）；只有找不到 `pwsh.exe` 时才回退到 Windows PowerShell 5.1。要真正回到 5.1，需要卸载 Store 版或把执行器 pin 到 `powershell.exe`，不推荐这样做。
+
+## 故障排查
+
+| 现象 | 处理 |
+|---|---|
+| Store 页面打开但没有「安装」按钮 | 确认 VPN 已关闭，完全退出并重启 Microsoft Store 后重试；或改用手动安装。 |
+| `pwsh` 仍运行 5.1 | 运行 `pwsh7_status`，按报告把 `pwshPath` 补丁粘进 profile 并重启；或安装 Store 版。 |
+| 插件页看不到 | 确认当前 profile 已启用 `dsh-win-pwsh7`，然后重启 DSH。 |
 
 ## 验证
 
@@ -101,3 +127,7 @@ node tools/check-native-contracts.mjs
 - 不做 VPN 自动检测、不做计量连接预检；VPN 由用户在安装前确认，页面加载失败时再提示。
 - 不自动重试；连续失败由熔断终止。
 - 提交前跑三套门；端到端安装是发布证据，不是自动化门的一部分。
+
+## License
+
+[MIT](LICENSE)

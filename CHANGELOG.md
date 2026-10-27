@@ -1,6 +1,8 @@
 # Changelog
 
-## 0.16.7 — release cleanup
+## 0.2.0 — 优化 Store 版 pwsh7 安装方式
+
+优化store版pwsh7安装方式，重构项目前端设计和工程设计，使其符合原生DSH工程习惯和界面风格。
 
 - Removed the retired internal `method: 'store'` / winget install route. `pwsh7_install` has only
   the Store-page script path plus the manual path; the tool schema never exposed the winget route.
@@ -10,6 +12,7 @@
 - Deleted `docs/acceptance-0.13.0.md`, which described the retired metered/winget behaviour.
 - READMEs no longer mention `installIfMissing`, the winget installer, or a "configuration card";
   they describe the current two install paths and the status card.
+- Declared `engines.dsh` (`>=0.2.1-rc.3 <0.2.2-0`) so an untested DSH line is rejected at install.
 
 ## 0.16.6 — status card matching the official provider card
 

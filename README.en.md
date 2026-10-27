@@ -12,13 +12,27 @@ Windows PowerShell 5.1.
 
 While enabled, the `pwsh` tool is allowed **only when the live executor resolves to PowerShell 7+**.
 Otherwise every call is denied by `ctx.tools.guard` before dispatch, the model is told to configure /
-install / disable, and no PowerShell process starts. Disabling the plugin restores the default
-runtime; the plugin still never writes `pwshPath`.
+install / disable, and no PowerShell process starts. Disabling the plugin removes the gate; the
+default executor then chooses the runtime itself, and the plugin still never writes `pwshPath`.
+
+## Verified environment
+
+- Windows 10/11.
+- Verified on DSH **0.2.1-rc.3** (see `dsh.verifiedAgainst` in `package.json`).
+- The script path needs Microsoft Store; the manual path only needs the Store page.
+- No administrator rights are required.
+
+## What it does not do
+
+- It does not install anything at startup.
+- It does not write the executor's `pwshPath` or edit the profile patch.
+- It does not uninstall a Store-installed PowerShell 7.
+- It does not auto-detect VPNs or preflight metered connections.
 
 ## Install this plugin
 
 ```powershell
-dsh plugin --profile desktop add github:XinSpark/dsh-win-pwsh7#v0.16.7
+dsh plugin --profile desktop add github:XinSpark/dsh-win-pwsh7#v0.2.0
 # or
 dsh plugin --profile desktop add dsh-win-pwsh7
 ```
@@ -66,8 +80,6 @@ set in the profile patch:
     overridePath: 'D:\tools\pwsh\pwsh.exe'
 ```
 
-There is no startup auto-install.
-
 ## Recommended companion
 
 When the script install completes, its job verdict contains an **instruction to the model**: tell the
@@ -84,6 +96,9 @@ installs do not advertise it repeatedly.
 
 ## Report example
 
+`pwsh7_status` returns the text report below; the plugin page renders the same state as a card
+rather than showing the whole report.
+
 ```
 Executor rows:
   pwsh-sandbox : pwshPath = C:\Users\...\WindowsApps\Microsoft.PowerShell_8wekyb3d8bbwe\pwsh.exe (PowerShell 7.6.9, Store family alias)
@@ -97,8 +112,23 @@ executor / disable the plugin.
 
 ## Plugin page
 
-The status section shows the current runtime, state and executor path, with Re-detect beside the
-title; the configuration section exposes only `overridePath`.
+The status section is a native card showing the state, runtime and executor path, with Re-detect
+at the top right; the configuration section exposes only `overridePath`.
+
+## Disable or uninstall
+
+Disabling the plugin removes the `pwsh` gate and the plugin page; it does not uninstall PowerShell 7.
+As long as `pwsh.exe` remains on the machine, the default executor still prefers it (normally the
+Store build); Windows PowerShell 5.1 is used only when no `pwsh.exe` can be found. To truly return
+to 5.1, uninstall the Store build or pin the executor to `powershell.exe` (not recommended).
+
+## Troubleshooting
+
+| Symptom | What to do |
+|---|---|
+| The Store page opens without an Install button | Confirm the VPN is off, fully quit and restart Microsoft Store, then retry; or use the manual path. |
+| `pwsh` still runs 5.1 | Run `pwsh7_status`, paste the reported `pwshPath` patch into the profile, and restart; or install the Store build. |
+| The plugin page is missing | Confirm `dsh-win-pwsh7` is enabled in the current profile, then restart DSH. |
 
 ## Verification
 
@@ -121,3 +151,7 @@ accepts the install root, `resources/app`, or `resources/app.asar`.
 - No automatic retries; the three-failure breaker ends the loop.
 - Run all three gates before publishing; end-to-end installation is release evidence, not part of
   the automated gate.
+
+## License
+
+[MIT](LICENSE)
