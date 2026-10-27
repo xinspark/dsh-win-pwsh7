@@ -25,14 +25,25 @@ default executor then chooses the runtime itself, and the plugin still never wri
 ## What it does not do
 
 - It does not install anything at startup.
-- It does not write the executor's `pwshPath` or edit the profile patch.
+- It does not write the executor's `pwshPath`; it only writes a marked dsh-ops compatibility override when coexistence is on.
 - It does not uninstall a Store-installed PowerShell 7.
 - It does not auto-detect VPNs or preflight metered connections.
+
+## Coexistence with dsh-ops
+
+On by default. When dsh-ops is installed, the plugin writes a marked `dsh-ops-compat` override into
+the active profile patch and enables dsh-ops Compatibility mode; after a DSH restart the native
+`pwsh` tool is back and `ops_bash` remains available.
+
+The bridge also hides the official `read` / `glob` / `grep` tools while their OPS counterparts are
+visible, plus the duplicate official `bash` / `pwsh_persistent` shell, leaving `pwsh` + `ops_bash`.
+Turning the switch off removes only the block this plugin wrote; uninstall cleanup is best-effort
+and leaves at most a harmless compatibility row.
 
 ## Install this plugin
 
 ```powershell
-dsh plugin --profile desktop add github:XinSpark/dsh-win-pwsh7#v0.2.0
+dsh plugin --profile desktop add github:XinSpark/dsh-win-pwsh7#v0.2.1
 # or
 dsh plugin --profile desktop add dsh-win-pwsh7
 ```
@@ -70,6 +81,7 @@ The count lives in the current process and resets when DSH restarts.
 | Key | Default | Meaning |
 |---|---|---|
 | `overridePath` | unset | Priority ① explicit `pwsh.exe`. It must spawn and report PowerShell 7+; a failed validation falls back to auto-detection. **It only changes probing and recommendations, not executor wiring.** |
+| `dshOpsCompat` | `true` | Coexist with dsh-ops: writes and enables its Compatibility mode, hides duplicate official tools, and keeps `pwsh` + `ops_bash`. Requires a restart. |
 
 `overridePath` is `volatile()`: the plugin-page configuration section saves it live; it can also be
 set in the profile patch:
@@ -113,7 +125,8 @@ executor / disable the plugin.
 ## Plugin page
 
 The status section is a native card showing the state, runtime and executor path, with Re-detect
-at the top right; the configuration section exposes only `overridePath`.
+at the top right; the configuration section exposes `overridePath` and the default-on
+"Keep native pwsh alongside dsh-ops" switch.
 
 ## Disable or uninstall
 

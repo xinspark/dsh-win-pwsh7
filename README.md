@@ -20,15 +20,21 @@
 ## 它不做什么
 
 - 不在启动时自动安装。
-- 不写执行器的 `pwshPath`，也不修改 profile 补丁。
+- 不写执行器的 `pwshPath`；只会在开启共存时写一条带标记的 dsh-ops 兼容覆盖。
 - 不卸载由 Store 安装的 PowerShell 7。
 - 不做 VPN 自动检测，也不做计量连接预检。
+
+## 与 dsh-ops 共存
+
+默认开启。检测到 dsh-ops 时，插件会向当前 profile 的 `cordis.patch.yml` 写入一条带标记的 `dsh-ops-compat` 覆盖，启用 dsh-ops 的 Compatibility 模式；重启 DSH 后官方 `pwsh` 恢复，`ops_bash` 保留。
+
+桥接层还会在对应 OPS 工具可见时隐藏官方 `read` / `glob` / `grep`，以及重复的官方 `bash` / `pwsh_persistent`，让工具面保持 `pwsh` + `ops_bash`。关闭开关只移除本插件写入的那条覆盖；卸载清理是 best-effort，最多残留一条无害的兼容行。
 
 ## 安装本插件
 
 ```powershell
 # 从 GitHub 安装（推荐锁定 tag）
-dsh plugin --profile desktop add github:XinSpark/dsh-win-pwsh7#v0.2.0
+dsh plugin --profile desktop add github:XinSpark/dsh-win-pwsh7#v0.2.1
 # 或 npm
 dsh plugin --profile desktop add dsh-win-pwsh7
 ```
@@ -61,6 +67,7 @@ dsh plugin --profile desktop add dsh-win-pwsh7
 | 键 | 默认 | 说明 |
 |---|---|---|
 | `overridePath` | 未设 | 优先级①的显式 `pwsh.exe`。必须能启动并报告 PowerShell 7+；未通过校验就回落到自动探测。**只影响探测与推荐，不接线**。 |
+| `dshOpsCompat` | `true` | 与 dsh-ops 共存：自动写入并启用兼容模式，隐藏重复的官方工具，保留 `pwsh` + `ops_bash`。需要重启。 |
 
 `overridePath` 是 `volatile()`：插件页配置区保存即生效；也可以写进 profile 补丁：
 
@@ -96,7 +103,7 @@ The executor resolves to the version-stable Store family alias: … Nothing to c
 
 ## 插件页
 
-插件页的状态区是原生卡片，显示状态、运行时和执行器路径，右上角有「重新检测」；配置区只有 `overridePath`。
+插件页的状态区是原生卡片，显示状态、运行时和执行器路径，右上角有「重新检测」；配置区有 `overridePath` 和默认开启的「与 dsh-ops 共存」开关。
 
 ## 禁用或卸载
 

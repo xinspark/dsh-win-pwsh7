@@ -12,7 +12,7 @@
  * from a table; the install checks run the job body against that stub, never Microsoft Store.
  */
 import { register } from 'node:module'
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import assert from 'node:assert/strict'
@@ -78,7 +78,7 @@ function makeStoreFixtures() {
  * A stub Host context: records registrations, prompt sections and job specs, answers probes,
  * spawns nothing. `jobs: false` omits the job registry.
  */
-function makeContext({ rows = [], versions = {}, jobs = false, shellPath, shellObject } = {}) {
+function makeContext({ rows = [], versions = {}, jobs = false, shellPath, shellObject, pluginManager, agents, visible } = {}) {
   const registered = new Map()
   const sections = []
   const orderNames = []
@@ -105,6 +105,8 @@ function makeContext({ rows = [], versions = {}, jobs = false, shellPath, shellO
     plugin() {},
     get: (key) => {
       if (key === 'configForms') return { get: () => ({}) }
+      if (key === 'pluginManager') return pluginManager
+      if (key === 'agents') return agents
       if (key === 'jobs' && jobs) return jobRegistry
       // The pwsh tool executes through `ctx.shell`; the executor's own `pwshPath` is the
       // authoritative "what will run" fact. A context without it keeps the row-based reading.
@@ -128,6 +130,13 @@ function makeContext({ rows = [], versions = {}, jobs = false, shellPath, shellO
           const index = guards.indexOf(guard)
           if (index >= 0) guards.splice(index, 1)
         }
+      },
+      restrict() { return () => {} },
+      view() {
+        return { visible: new Map((visible ?? []).map((name) => [name, {}])) }
+      },
+      schemas() {
+        return (visible ?? []).map((name) => ({ name }))
       },
     },
     on(event, listener) {
@@ -640,6 +649,69 @@ if (existsSync(MSI)) {
   if (savedProgramFiles === undefined) delete process.env.ProgramFiles
   else process.env.ProgramFiles = savedProgramFiles
 }
+
+// --- dsh-ops compatibility patch ---------------------------------------------------------
+const compatDir = mkdtempSync(join(tmpdir(), 'dsh-win-pwsh7-compat-'))
+const compatPatchPath = join(compatDir, 'cordis.patch.yml')
+writeFileSync(compatPatchPath, '- id: keep-me\n  name: keep-me\n', 'utf8')
+const savedProfileDir = process.env.DSH_PROFILE_DIR
+process.env.DSH_PROFILE_DIR = compatDir
+const compatMachine = makeContext({
+  pluginManager: {
+    async listBundles() {
+      return [{ name: 'dsh-ops', installed: true, rows: [{ moduleName: 'dsh-ops/compat' }] }]
+    },
+  },
+})
+apply(compatMachine.ctx, {})
+await new Promise((resolve) => setTimeout(resolve, 50))
+const compatWritten = readFileSync(compatPatchPath, 'utf8')
+check('dsh-ops coexistence writes a marked compatibility override', () => {
+  assert.match(compatWritten, /dsh-win-pwsh7: dsh-ops compatibility \(managed\)/u)
+  assert.match(compatWritten, /- id: dsh-ops-compat\n  disabled: false/u)
+  assert.match(compatWritten, /- id: keep-me/u, 'the user patch entry was lost')
+})
+apply(compatMachine.ctx, { dshOpsCompat: false })
+await new Promise((resolve) => setTimeout(resolve, 50))
+const compatRemoved = readFileSync(compatPatchPath, 'utf8')
+check('turning coexistence off removes only the managed override', () => {
+  assert.ok(!compatRemoved.includes('dsh-win-pwsh7: dsh-ops compatibility'), 'the managed block survived')
+  assert.ok(compatRemoved.includes('- id: keep-me'), 'the user patch entry was removed')
+})
+if (savedProfileDir === undefined) delete process.env.DSH_PROFILE_DIR
+else process.env.DSH_PROFILE_DIR = savedProfileDir
+rmSync(compatDir, { recursive: true, force: true })
+
+// --- agent bridge hides only the duplicate tools ------------------------------------------
+const bridgeDenies = []
+const bridgeAgent = {
+  ctx: {
+    tools: {
+      restrict({ deny }) {
+        bridgeDenies.push(deny)
+        return () => {}
+      },
+    },
+  },
+}
+const bridgeMachine = makeContext({
+  agents: { list: () => [bridgeAgent] },
+  visible: [
+    'read', 'ops_inspect_local_file',
+    'glob', 'ops_glob',
+    'grep', 'ops_grep',
+    'bash', 'pwsh', 'pwsh_persistent', 'ops_bash',
+  ],
+})
+apply(bridgeMachine.ctx, {})
+check('dsh-ops bridge hides duplicate official tools but keeps pwsh', () => {
+  const deny = bridgeDenies.at(-1) ?? []
+  for (const name of ['read', 'glob', 'grep', 'bash', 'pwsh_persistent']) {
+    assert.ok(deny.includes(name), `bridge did not hide ${name}: ${deny.join(', ')}`)
+  }
+  assert.ok(!deny.includes('pwsh'), 'bridge hid the native pwsh tool')
+  assert.ok(!deny.includes('ops_bash'), 'bridge hid ops_bash')
+})
 
 // --- The client half's policy copy must not drift (static; no browser needed) -------------
 

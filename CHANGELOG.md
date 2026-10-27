@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.1 — dsh-ops coexistence bridge
+
+- Added a default-on `dshOpsCompat` configuration row. When dsh-ops is installed, pwsh7 writes
+  a marked `dsh-ops-compat` override into the active profile patch and enables it, so the native
+  `pwsh` tool is visible again alongside `ops_bash`.
+- The agent bridge re-hides the official `read` / `glob` / `grep` tools when their OPS
+  counterparts are visible, plus the duplicate official `bash` / `pwsh_persistent` shell. It
+  keeps `pwsh` and `ops_bash` and does nothing when dsh-ops is absent.
+- The compatibility patch needs a DSH restart; turning the switch off removes only the block this
+  plugin wrote. Uninstall cleanup is best-effort and leaves at most a harmless compatibility row.
+- Added the plugin-page toggle with its own localized row and hint.
+
 ## 0.2.0 — 优化 Store 版 pwsh7 安装方式
 
 优化store版pwsh7安装方式，重构项目前端设计和工程设计，使其符合原生DSH工程习惯和界面风格。

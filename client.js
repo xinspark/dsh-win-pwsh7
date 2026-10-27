@@ -98,6 +98,8 @@ window.__ModuleLoader__.load({
       card_title: 'Configuration',
       field_overridePath: 'Explicit path (overridePath)',
       overridePath_hint: 'Priority ① explicit pwsh.exe path. Empty = auto-detect. It must spawn and report PowerShell 7 or newer; the Store family alias is accepted, while a version-numbered Store path is never pinned. This only changes what the plugin probes and recommends — it does not wire the pwsh tool. Use the patch in the status section for that.',
+      field_dshOpsCompat: 'Keep native pwsh alongside dsh-ops (dshOpsCompat)',
+      dshOpsCompat_hint: 'Default on. When dsh-ops is installed, this enables its Compatibility row and re-hides the official read/glob/grep and duplicate shell, leaving pwsh + ops_bash. The profile change needs a DSH restart.',
       save: 'Save',
       reset: 'Reset',
       saved: 'Saved {at}',
@@ -140,6 +142,8 @@ window.__ModuleLoader__.load({
       card_title: '配置',
       field_overridePath: '指定路径（overridePath）',
       overridePath_hint: '优先级①的显式 pwsh.exe 路径。留空 = 自动探测。必须能启动并报告 PowerShell 7 及以上；Store 家族别名可用，版本号目录永不被 pin。这里只影响插件的探测与推荐，不会给 pwsh 工具接线；接线请用状态区里的补丁。',
+      field_dshOpsCompat: '与 dsh-ops 共存，保留原生 pwsh（dshOpsCompat）',
+      dshOpsCompat_hint: '默认开启。检测到 dsh-ops 时自动启用它的兼容模式，并重新隐藏官方 read/glob/grep 和重复的 shell，只留下 pwsh + ops_bash。profile 变更需要重启 DSH 生效。',
       save: '保存',
       reset: '重置',
       saved: '已保存 {at}',
@@ -181,6 +185,8 @@ window.__ModuleLoader__.load({
 .dw7-input:focus-visible{outline:none;border-color:var(--dsw-alias-state-business-primary);}
 .dw7-input:disabled{color:var(--dsw-alias-label-tertiary);cursor:default;}
 .dw7-hint{margin:0;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:1.5;}
+.dw7-check-row{display:flex;align-items:center;gap:8px;min-width:0;}
+.dw7-check{width:16px;height:16px;flex:none;margin:0;accent-color:var(--dsw-alias-brand-primary);}
 .dw7-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding-top:4px;}
 .dw7-save{appearance:none;border:1px solid transparent;border-radius:var(--dsw-radius-md);padding:5px 14px;font:inherit;font-size:13px;line-height:1.5;cursor:pointer;background:var(--dsw-alias-label-primary);color:var(--dsw-alias-bg-layer-3);}
 .dw7-save:disabled{opacity:.4;cursor:default;}
@@ -415,9 +421,10 @@ window.__ModuleLoader__.load({
           const unavailable = snap.status === 'unavailable'
           const served = {
             overridePath: typeof snap.value?.overridePath === 'string' ? snap.value.overridePath : '',
+            dshOpsCompat: snap.value?.dshOpsCompat !== false,
           }
           const values = draft ?? served
-          const dirty = draft !== null && values.overridePath !== served.overridePath
+          const dirty = draft !== null && (values.overridePath !== served.overridePath || values.dshOpsCompat !== served.dshOpsCompat)
           const editable = !loading && !unavailable && snap.writable !== false && !busy
 
           async function save() {
@@ -430,6 +437,9 @@ window.__ModuleLoader__.load({
                 if (served.overridePath !== '') ok = await form.unset('overridePath') && ok
               } else if (nextPath !== served.overridePath) {
                 ok = await form.set('overridePath', nextPath) && ok
+              }
+              if (values.dshOpsCompat !== served.dshOpsCompat) {
+                ok = await form.set('dshOpsCompat', values.dshOpsCompat) && ok
               }
               if (ok) {
                 setDraft(null)
@@ -462,12 +472,27 @@ window.__ModuleLoader__.load({
                     disabled: !editable,
                     placeholder: 'C:\\Program Files\\PowerShell\\7\\pwsh.exe',
                     onChange: (event) => {
-                      setDraft({ overridePath: event.target.value })
+                      setDraft({ ...values, overridePath: event.target.value })
                       setNote(null)
                       setSavedAt(null)
                     },
                   }),
                   h('p', { className: 'dw7-hint' }, t('overridePath_hint'))),
+                h('div', { className: 'dw7-field', key: 'dshOpsCompat' },
+                  h('label', { className: 'dw7-check-row' },
+                    h('input', {
+                      className: 'dw7-check',
+                      type: 'checkbox',
+                      checked: values.dshOpsCompat,
+                      disabled: !editable,
+                      onChange: (event) => {
+                        setDraft({ ...values, dshOpsCompat: event.target.checked })
+                        setNote(null)
+                        setSavedAt(null)
+                      },
+                    }),
+                    h('span', { className: 'dw7-label' }, t('field_dshOpsCompat'))),
+                  h('p', { className: 'dw7-hint' }, t('dshOpsCompat_hint'))),
                 h('div', { className: 'dw7-actions', key: 'actions' },
                   h('button', {
                     className: 'dw7-save',

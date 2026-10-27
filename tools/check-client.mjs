@@ -141,24 +141,24 @@ const cardTree = card({ view: 'page' })
 const cardTexts = textsOf(cardTree)
 
 check('the card renders its labels from the dictionaries, never as bare config keys', () => {
-  for (const key of ['overridePath']) {
+  for (const key of ['overridePath', 'dshOpsCompat']) {
     assert.ok(!cardTexts.includes(key),
       `the card rendered the bare config key "${key}" — a label was written as a literal instead of t()`)
   }
-  for (const expected of [dictionaries.zh.field_overridePath]) {
+  for (const expected of [dictionaries.zh.field_overridePath, dictionaries.zh.field_dshOpsCompat]) {
     assert.ok(cardTexts.includes(expected), `the card does not render the label "${expected}"`)
   }
 })
 check('each field label also keeps its raw config key, so the form maps to cordis.patch.yml', () => {
   const labels = elementsOf(cardTree, 'label').map((element) => textsOf(element).join(''))
-  assert.equal(labels.length, 1, `expected one label, found ${labels.length}`)
-  for (const [index, key] of ['overridePath'].entries()) {
+  assert.equal(labels.length, 2, `expected two labels, found ${labels.length}`)
+  for (const [index, key] of ['overridePath', 'dshOpsCompat'].entries()) {
     assert.match(labels[index], new RegExp(key, 'u'), `label ${index} drops the raw key ${key}`)
     assert.match(labels[index], /[\u4e00-\u9fff]/u, `label ${index} is not localized: ${labels[index]}`)
   }
 })
 check('the card renders every hint in Chinese', () => {
-  for (const hint of [dictionaries.zh.overridePath_hint]) {
+  for (const hint of [dictionaries.zh.overridePath_hint, dictionaries.zh.dshOpsCompat_hint]) {
     assert.ok(cardTexts.includes(hint), `the card does not render the hint "${hint.slice(0, 24)}…"`)
   }
 })
