@@ -76,7 +76,7 @@ function makeStoreFixtures() {
  * which is what lets the gate prove the install tool returns *before* winget exits.
  * `jobs: false` omits the job registry entirely, to exercise the inline fallback.
  */
-function makeContext({ rows = [], versions = {}, deferred = false, jobs = false } = {}) {
+function makeContext({ rows = [], versions = {}, deferred = false, jobs = false, shellPath } = {}) {
   const registered = new Map()
   const spawned = []
   const terminated = []
@@ -98,6 +98,14 @@ function makeContext({ rows = [], versions = {}, deferred = false, jobs = false 
     get: (key) => {
       if (key === 'configForms') return { get: () => ({}) }
       if (key === 'jobs' && jobs) return jobRegistry
+      // The pwsh tool executes through `ctx.shell`; the executor's own `pwshPath` is the
+      // authoritative "what will run" fact. A context without it keeps the row-based reading.
+      if (key === 'shell' && shellPath !== undefined) {
+        return {
+          pwshPath: shellPath,
+          config: { pwshPath: { get: () => undefined } },
+        }
+      }
       return undefined
     },
     tools: {
@@ -231,6 +239,23 @@ for (const tool of machine.registered.values()) {
 check('the install tool refuses to install over a usable PowerShell 7', () => {
   assert.ok(!machine.spawned.some((executable) => /winget/iu.test(executable)),
     `winget was spawned: ${machine.spawned.join(', ')}`)
+})
+
+// --- The executor's own path is authoritative -------------------------------------------
+
+const shellMachine = makeContext({
+  shellPath: 'C:\\Tools\\pwsh.exe',
+  versions: { 'C:\\Tools\\pwsh.exe': '7.6.9' },
+})
+apply(shellMachine.ctx, {})
+await flush()
+const shellValue = await shellMachine.registered.get('pwsh7_status').execute({}, undefined)
+
+check('the report reads the executor path, not the config rows', () => {
+  const value = shellValue
+  assert.match(value.report, /via the executor \(C:\\Tools\\pwsh\.exe\)/u)
+  assert.match(value.report, /PowerShell 7\.6\.9/u)
+  assert.match(value.report, /Nothing to configure/u)
 })
 
 // --- Rejections, and the two Store forms ------------------------------------------------

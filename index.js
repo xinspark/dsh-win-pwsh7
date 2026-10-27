@@ -472,6 +472,51 @@ async function activationSweep(ctx, config) {
 }
 
 /**
+ * Read the executable the `pwsh` tool will actually spawn, from the executor itself.
+ *
+ * `dsh-tool-pwsh` executes through `ctx.shell`; `PwshLocalExecutor.argv()` prefixes every command
+ * with `this.pwshPath`, and that getter re-resolves when the declared config changes. It is the
+ * authoritative "what will run" fact — more reliable than rebuilding the answer from
+ * `configEditor.entries()`, which only exposes `include`-owned rows (a Desktop-generated live row
+ * may not be addressable).
+ *
+ * `pwshPath` is a `PwshLocalExecutor` getter, not part of the `ShellExecutor` abstract seam, so the
+ * read is feature-detected and falls back to the concrete config + resolver. When no shell service
+ * is composed the caller keeps the legacy row-based reading.
+ * @param ctx - the row's Host context.
+ * @returns `{ path, version, origin, source }`, or `undefined` when there is no shell service.
+ */
+async function shellRuntimeReading(ctx) {
+  const shell = ctx.get?.('shell')
+  if (shell === undefined || shell === null) return undefined
+
+  let path
+  let source
+  try {
+    if (typeof shell.pwshPath === 'string' && shell.pwshPath.length > 0) {
+      path = shell.pwshPath
+      source = 'shell'
+    } else {
+      const declared = shell.config?.pwshPath?.get?.()
+      if (isSet(declared)) {
+        path = resolvePwshPath(declared, process.env, 'win32')
+        source = 'shell-config'
+      } else {
+        path = resolvePwshPath(undefined, process.env, 'win32')
+        source = 'resolver'
+      }
+    }
+  } catch (error) {
+    ctx.logger?.warn?.('dsh-win-pwsh7: could not read the executor path: %s', describe(error))
+    return { path: undefined, version: undefined, origin: 'ordinary', source: 'shell' }
+  }
+
+  if (!isSet(path) || path === 'pwsh') return { path, version: undefined, origin: 'ordinary', source }
+  const version = await probeVersion(ctx, path)
+  return { path, version, origin: originOf(path), source }
+}
+
+/**
  * Build the human-readable report: the requested path check (when asked), the configured
  * override, what the executor rows run today, and the recommendation — a patch for an
  * ordinary-file PowerShell 7, or the Microsoft Store install path for a Store-only machine.
@@ -486,10 +531,13 @@ async function renderStatus(ctx, config, options = {}) {
     ? undefined
     : await validateCandidate(ctx, options.explicitPath)
   const rows = await executorRows(ctx)
+  const shellReading = await shellRuntimeReading(ctx)
 
   // Every caller of this function (activation sweep, both tools, the page's Re-detect)
   // refreshes the prompt section from the same reading as the report.
-  runtimeNote = runtimeNoteFor(rows, status)
+  runtimeNote = shellReading?.version !== undefined
+    ? hintFor(shellReading.version)
+    : runtimeNoteFor(rows, status)
 
   const lines = []
 
@@ -516,8 +564,31 @@ async function renderStatus(ctx, config, options = {}) {
   lines.push('')
 
   const enabled = rows.filter((row) => row.disabled !== true && row.options?.disabled !== true)
-  const effective = enabled.find((row) => row.version !== undefined)
+  const shellVersion = shellReading?.version
+  const shellMajor = shellVersion === undefined ? undefined : Number.parseInt(shellVersion.split('.')[0] ?? '', 10)
+  const shellEffective = shellMajor !== undefined && shellMajor >= MINIMUM_MAJOR
+    ? { id: 'ctx.shell', version: shellVersion, origin: shellReading.origin, path: shellReading.path, source: shellReading.source }
+    : undefined
+  // A shell that exists but could not report a version is an unknown runtime, not a licence to
+  // fall back to a row reading that may disagree with what the tool will spawn.
+  const shellUnknown = shellReading !== undefined && shellReading.version === undefined
+  const effective = shellEffective ?? (shellUnknown ? undefined : enabled.find((row) => row.version !== undefined))
   if (effective !== undefined) {
+    if (shellEffective !== undefined) {
+      lines.push(`The pwsh tool currently runs on PowerShell ${effective.version} via the executor (${effective.path}).`)
+      if (effective.origin === 'store-alias') {
+        lines.push('The executor resolves to the version-stable Store family alias: its directory carries no version,')
+        lines.push('so Store updates do not move it, and the ACL sandbox still confines what it runs. Nothing to configure.')
+        lines.push('Caveat: Windows resolves the alias through AppInfo package activation, which is undocumented —')
+        lines.push('if a future Windows or Store change stops it, run pwsh7_install, or pin an ordinary pwsh.exe.')
+      } else if (effective.origin === 'store-package') {
+        lines.push('The executor resolves to a version-numbered Store path, which moves on every Store update.')
+        lines.push('Repin the version-stable family alias, or run pwsh7_install for a Store-managed PowerShell.')
+      } else {
+        lines.push('That is the path the executor already resolves; Nothing to configure.')
+      }
+      return lines.join('\n')
+    }
     lines.push(`The pwsh tool currently runs on PowerShell ${effective.version} via row ${effective.id}.`)
     const others = enabled.filter((row) => row !== effective && row.version !== undefined)
     if (others.length > 0) {
