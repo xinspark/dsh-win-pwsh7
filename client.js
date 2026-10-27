@@ -157,6 +157,7 @@ window.__ModuleLoader__.load({
 .dw7-diag-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;}
 .dw7-diag-title{color:var(--dsw-alias-label-primary);font-size:14px;font-weight:600;}
 .dw7-diag-at{color:var(--dsw-alias-label-secondary);font-size:12px;}
+.dw7-diag-redetect{margin-left:auto;}
 .dw7-diag-report{margin:0;padding:12px;background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l1);border-radius:6px;color:var(--dsw-alias-label-primary);font-size:12px;line-height:1.55;white-space:pre-wrap;word-break:break-all;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;max-height:320px;overflow:auto;}
 .dw7-diag-err{color:var(--dsw-alias-state-error-primary);font-size:12px;}
 .dw7-diag-idle{color:var(--dsw-alias-label-secondary);font-size:12px;}
@@ -290,7 +291,12 @@ window.__ModuleLoader__.load({
             h('style', null, CSS_DIAG),
             h('div', { className: 'dw7-diag-head' },
               h('span', { className: 'dw7-diag-title' }, t('diagnostics_title')),
-              snap.at ? h('span', { className: 'dw7-diag-at' }, t('refreshed_at', { at: snap.at })) : null),
+              snap.at ? h('span', { className: 'dw7-diag-at' }, t('refreshed_at', { at: snap.at })) : null,
+              h('button', {
+                className: 'dw7-btn dw7-btn-ghost dw7-diag-redetect',
+                onClick: () => void refresh(),
+                disabled: snap.state === 'loading',
+              }, snap.state === 'loading' ? t('redetecting') : t('redetect'))),
             h('pre', { className: 'dw7-diag-report' }, body),
             metered ? h('div', { className: 'dw7-diag-net' }, t('network_metered')) : null,
             patch !== null
@@ -304,19 +310,6 @@ window.__ModuleLoader__.load({
             snap.error !== null && snap.report ? h('div', { className: 'dw7-diag-err' }, t('status_error', { error: snap.error })) : null,
             snap.report === null && snap.error === null && snap.state !== 'loading' ? h('div', { className: 'dw7-diag-idle' }, t('status_empty')) : null,
           )
-        }
-
-        function RedetectAction(props) {
-          const pkg = props?.subject?.pkg
-          const active = pkg === PACKAGE || pkg?.name === PACKAGE
-          const snap = useSyncExternalStore(diagnostics.subscribe, diagnostics.get)
-          if (!active) return null
-          const loading = snap.state === 'loading'
-          return h('button', {
-            className: 'dw7-btn dw7-btn-ghost',
-            onClick: () => void refresh(),
-            disabled: loading,
-          }, loading ? t('redetecting') : t('redetect'))
         }
 
         function ConfigureCard(props) {
@@ -444,12 +437,6 @@ window.__ModuleLoader__.load({
               order: 50,
               locale: PACKAGE,
             }, DiagnosticsSection)),
-            ctx.slots.inject('plugins.detail.actions', () => ctx.slots.register({
-              name: 'plugins.detail.actions',
-              id: PACKAGE + '.redetect',
-              order: 50,
-              locale: PACKAGE,
-            }, RedetectAction)),
           ]
           return () => {
             for (const dispose of disposers) dispose?.()

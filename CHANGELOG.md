@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.13.1 — install, then actually usable
+
+The 0.13.0 gate read the executor correctly but inherited the executor's own cache: `pwsh7_install`
+could install PowerShell 7.6.9 while the running `PwshLocalExecutor` still resolved to 5.1, so the
+tool stayed blocked and `pwsh7_status` could even answer "Nothing to configure". Both are fixed.
+
+- **The install now nudges the executor cache.** `PwshLocalExecutor.pwshPath` re-resolves only when
+  its declared config changes. After a successful install the plugin writes a sentinel into that
+  cache and re-reads the getter, so the same running process resolves the new Store alias. No
+  profile patch and no restart are needed when the concrete executor exposes the cache.
+- **The nudge is feature-detected.** If a composition does not expose `declaredPwshPath` /
+  `resolvedPwshPath`, the install report says so and prints the pin + reload patch instead of
+  pretending the tool is ready. `tools/check-native-contracts.mjs` now guards both fields.
+- **The status can no longer call a stale executor "native".** When the live executor still reports
+  5.1, the report keeps the `running executor still resolves to Windows PowerShell 5.1` warning,
+  prints the pin patch, and never says "Nothing to configure" just because the standalone resolver
+  now finds a Store alias.
+- **Failures that cannot be nudged are explicit.** `installVerdict` distinguishes "the running
+  executor now resolves to 7.6.9" from "it still resolves to 5.1; pin pwsh-sandbox.pwshPath and
+  reload DSH", so the user is not left with a contradictory success message.
+- **The Re-detect button moved into the status section.** It used to sit in the detail page's
+  head actions, away from the text it refreshes; it now renders beside the status title, where a
+  reader looks for it. `plugins.detail.actions` no longer carries a second copy.
+- **Tests.** A stale live 5.1 + resolver 7 case must not render "Nothing to configure"; a stubbed
+  executor cache must be refreshed by the nudge; the contract gate asserts the cache fields exist;
+  the client gate renders the section's own Re-detect and drives the Remote flow through it.
+
+Measured against the 2026-10-27 work-exp report: install landed 7.6.9, the tool remained blocked
+until a manual `pwsh-sandbox.pwshPath` pin, and status said "Nothing to configure" in the same
+window. This release removes that manual step on the normal path and makes the fallback honest.
+
 ## 0.13.0 — enabled means gated
 
 The plugin was observational: with only Windows PowerShell 5.1 it warned the model and let the

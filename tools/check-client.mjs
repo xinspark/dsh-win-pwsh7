@@ -126,13 +126,11 @@ client.apply(ctx)
 const componentFor = (slot) => registered.find((item) => item.registration.name === slot)?.component
 const card = componentFor('plugins.row.config')
 const diagnostics = componentFor('plugins.detail.section')
-const redetect = componentFor('plugins.detail.actions')
 
-check('the client half registers all three contributions', () => {
+check('the client half registers the two contributions the page uses', () => {
   assert.deepEqual(registered.map((item) => item.registration.name), [
     'plugins.row.config',
     'plugins.detail.section',
-    'plugins.detail.actions',
   ])
   assert.equal(registered[0].registration.key, 'dsh-win-pwsh7#win-pwsh7')
 })
@@ -228,9 +226,11 @@ check('the diagnostics section renders its localized title and idle text', () =>
 check('the diagnostics section stays out of other plugins pages', () => {
   assert.equal(diagnostics({ subject: { pkg: 'some-other-plugin' } }), null)
 })
-check('the action renders the localized Re-detect label', () => {
-  const texts = textsOf(redetect({ subject: { pkg: 'dsh-win-pwsh7' } }))
-  assert.ok(texts.includes(dictionaries.zh.redetect), `the action does not render "${dictionaries.zh.redetect}"`)
+check('the diagnostics section renders the localized Re-detect label', () => {
+  assert.ok(diagnosticsTexts.includes(dictionaries.zh.redetect),
+    `the section does not render "${dictionaries.zh.redetect}"`)
+  assert.ok(!registered.some((item) => item.registration.name === 'plugins.detail.actions'),
+    'the Re-detect button still has a second home in plugins.detail.actions')
 })
 
 // --- Copy hygiene -------------------------------------------------------------------------
@@ -309,9 +309,8 @@ const remoteCtx = {
 const remoteBefore = registered.length
 client.apply(remoteCtx)
 const remoteParts = registered.slice(remoteBefore)
-const remoteAction = remoteParts.find((item) => item.registration.name === 'plugins.detail.actions')?.component
 const remoteSection = remoteParts.find((item) => item.registration.name === 'plugins.detail.section')?.component
-const remoteButton = elementsOf(remoteAction({ subject: { pkg: 'dsh-win-pwsh7' } }), 'button')[0]
+const remoteButton = elementsOf(remoteSection({ subject: { pkg: 'dsh-win-pwsh7' } }), 'button')[0]
 assert.ok(remoteButton !== undefined, 'the re-detect action rendered no button')
 
 remoteButton.props.onClick()

@@ -38,6 +38,7 @@
   - 计量连接 / `Unknown` / 探测失败 / 无 winget → **不启动 job**，报告点名网络、要关掉的「按流量计费的连接」、验证方式与手动命令；
   - 非计量且 winget 可用 → 启动后台作业，返回 job id。
 - 不要求真的装完；看返回文本/作业号即可。**注意**：如果网络正常，`pwsh7_install` 会真的重新安装 PowerShell 7；不想恢复就不要运行它。
+- 0.13.1 起，安装成功后插件会先尝试刷新执行器缓存的 `pwshPath`；若仍被拦截、或状态页出现 `running executor still resolves to Windows PowerShell …`，按状态区给出的 pin patch + 重载处理。
 
 ## 4. 禁用插件
 

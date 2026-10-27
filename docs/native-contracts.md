@@ -40,6 +40,7 @@ instead of trusting this table.
 |---|---|---|---|
 | The `pwsh` tool is registered under that exact name and executes through `ctx.shell` | `dsh-tool-pwsh/lib/index.js:465-466` `defineTool({ name: "pwsh" })`; `:628` `execute`; `:649/660/672` `ctx.shell.resolve/execute`; exports `name = "tool-pwsh"`, `inject` includes `tools`, `shell`, `systemPrompt` | A global guard on `exec.name === "pwsh"` sees the call; the path the tool spawns is the executor's resolved path | gate |
 | The exact executable the pwsh tool will spawn | `dsh-pwsh-local/lib/index.js:154-161` `PwshLocalExecutor.pwshPath` getter; `:197-205` `argv()` uses it; `dsh-pwsh-sandbox/lib/index.js:118` `SandboxPwshExecutor extends PwshLocalExecutor`; `dsh-shell/lib/index.js:83-93` the `shell` service | `ctx.get('shell').pwshPath` is the live resolved path; reading the getter re-resolves when the declared config changes | gate / report |
+| The executor caches the resolved path | `dsh-pwsh-local/lib/index.js` fields `declaredPwshPath` / `resolvedPwshPath`; getter only re-resolves when the declared value differs | An install performed while the host runs leaves the cached 5.1 path; writing a sentinel into `declaredPwshPath` forces the same getter to re-run the resolver. Feature-detected; without the fields the report prints pin + reload | install / status |
 | A configured `pwshPath` is trusted as-is | `dsh-pwsh-local/lib/index.js:59-65` `resolvePwshPath`: a non-empty configured value is returned before any existence check | A pin pointing at a missing file fails at spawn; there is no fallback to 5.1 | config guidance |
 | Default resolution order | `dsh-pwsh-local/lib/index.js:23-34` `candidatePwshPaths`; `:42-49` `candidateExists` | `%ProgramFiles%\PowerShell\7\pwsh.exe` → every PATH entry → `%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe`; a file or a reparse point qualifies | detection |
 | Guards are global, synchronous, monotonic, and deny with a reason | `dsh-tools/lib/types/index.js:531` `guard`; `:535` `guardReason`; `:875` `prepareExecution`; `:896-907` materializes `content: "Error: <reason>"`, `isError: true`, `error.message = reason`; `:497-500` `restrict` requires an agent scope | A plain-context guard covers every agent; no later guard can force-allow; the model sees the reason as the tool error | gate |
@@ -47,7 +48,7 @@ instead of trusting this table.
 | The install job handle exposes `append` and `updateProgress` | `dsh-jobs-local/lib/index.js:412-439`: `start(spec)` validates kind/label, builds `handle = { append, updateProgress }`, calls `spec.run(handle)` | The existing install job spec is compatible; `jobs.start` requires a job controller for the owner | install job |
 | `configEditor.entries()` only exposes `include`-owned rows | `dsh-config-editor/lib/index.js:30-35` filters `entry.parent.tree.ctx.fiber.entry?.id === "include"`; `:69-135` `edit` writes the profile patch | A Desktop-generated live executor row may not be addressable; scanning rows is not a reliable "what runs" source | report / config guidance |
 | The pwsh prompt section has a stable placement | `dsh-system-prompt/lib/index.js:10-43`, `TOOL_PWSH: 1010`; `SystemPrompt.getSectionOrder` | `getSectionOrder('TOOL_PWSH')` is the right anchor for `tool:pwsh-runtime` | prompt |
-| Client slots used by the page still exist | live `Slots.listSubTree`: `plugins.row.config` (key `dsh-win-pwsh7#win-pwsh7`), `plugins.detail.section` (`dsh-win-pwsh7.diagnostics`, order 50), `plugins.detail.actions` (`dsh-win-pwsh7.redetect`, order 50) | The detail page, config card and Re-detect button remain registered; additions must not replace them | client |
+| Client slots used by the page still exist | live `Slots.listSubTree`: `plugins.row.config` (key `dsh-win-pwsh7#win-pwsh7`), `plugins.detail.section` (`dsh-win-pwsh7.diagnostics`, order 50) | The detail page and config card remain registered; the Re-detect button renders inside the diagnostics section, and `plugins.detail.actions` is no longer used by this plugin | client |
 
 ## Findings that changed the plan
 
@@ -62,12 +63,16 @@ instead of trusting this table.
 4. **Config guidance is copy-paste, not a write.** `ConfigEditor.edit` exists, but the plugin must not
    write `pwshPath` or the user's profile patch; the current value is used only to render the patch.
 5. **The prompt section order is 1010, not a guessed value.** Use `getSectionOrder('TOOL_PWSH')`.
+6. **The executor's path cache needs a nudge after an install.** `pwsh7_status` must not call a
+   cached 5.1 executor "native" just because the standalone resolver now finds a Store alias; the
+   install and status paths force the getter to re-resolve, and fall back to pin + reload when the
+   cache fields are absent.
 
 ## Re-verification
 
 ```powershell
 $env:DSH_APP_DIR = 'E:\FXS\APP\DSH NEXT\resources\app.asar'   # install root, resources/app, or app.asar
-npm run check:contracts
+node tools/check-native-contracts.mjs
 ```
 
 On an upgrade: rerun the gate, recompute the package table, and update the baseline only after the

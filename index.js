@@ -603,6 +603,46 @@ async function shellRuntimeReading(ctx) {
   return { path, version, origin: originOf(path), source }
 }
 
+/**
+ * Force the executor to re-resolve its cached `pwshPath`.
+ *
+ * `PwshLocalExecutor.pwshPath` only re-resolves when the declared config value changes. An install
+ * that lands while the host is running (the normal `pwsh7_install` case) therefore leaves the
+ * cached 5.1 path in place, and the tool stays blocked even though the Store package is installed.
+ * Writing a value the declared config cannot equal makes that same getter re-run the resolver; it
+ * changes no configuration. The cache is a concrete-executor implementation detail, so the read is
+ * feature-detected and a composition without it keeps the patch/reload guidance instead.
+ * @param ctx - the row's Host context.
+ * @returns the new reading when the nudge produced a usable PowerShell 7, else `undefined`.
+ */
+async function refreshExecutorPath(ctx) {
+  const shell = ctx.get?.('shell')
+  if (shell === undefined || shell === null) return undefined
+  let before
+  try {
+    before = shell.pwshPath
+  } catch {
+    return undefined
+  }
+  if (typeof before !== 'string' || before.length === 0) return undefined
+  try {
+    shell.declaredPwshPath = Symbol('dsh-win-pwsh7-refresh')
+    shell.resolvedPwshPath = undefined
+  } catch {
+    return undefined
+  }
+  let after
+  try {
+    after = shell.pwshPath
+  } catch {
+    return undefined
+  }
+  if (typeof after !== 'string' || after.length === 0 || after === before) return undefined
+  const version = await probeVersion(ctx, after)
+  if (version === undefined || (majorOf(version) ?? 0) < MINIMUM_MAJOR) return undefined
+  return { before, after, version }
+}
+
 /** The major version of a probed string, or `undefined` when it is not a version. */
 function majorOf(version) {
   if (version === undefined) return undefined
@@ -664,7 +704,11 @@ async function refreshGate(ctx, config) {
     try {
       const status = await detect(ctx, config)
       const rows = await executorRows(ctx)
-      const reading = await shellRuntimeReading(ctx)
+      let reading = await shellRuntimeReading(ctx)
+      if (reading?.version !== undefined && (majorOf(reading.version) ?? 0) < MINIMUM_MAJOR) {
+        const refreshed = await refreshExecutorPath(ctx)
+        if (refreshed !== undefined) reading = await shellRuntimeReading(ctx)
+      }
       state.gate = gateFromReading(reading, rows, status)
       state.runtimeNote = state.gate.version !== undefined ? hintFor(state.gate.version) : runtimeNoteFor(rows, status)
       return state.gate
@@ -723,7 +767,14 @@ async function renderStatus(ctx, config, options = {}) {
     ? undefined
     : await validateCandidate(ctx, options.explicitPath)
   const rows = await executorRows(ctx)
-  const shellReading = await shellRuntimeReading(ctx)
+  let shellReading = await shellRuntimeReading(ctx)
+  if (shellReading?.version !== undefined && (majorOf(shellReading.version) ?? 0) < MINIMUM_MAJOR) {
+    const refreshed = await refreshExecutorPath(ctx)
+    if (refreshed !== undefined) shellReading = await shellRuntimeReading(ctx)
+  }
+  const liveStale = shellReading !== undefined
+    && shellReading.version !== undefined
+    && (majorOf(shellReading.version) ?? 0) < MINIMUM_MAJOR
 
   // Every caller of this function (activation sweep, both tools, the page's Re-detect)
   // refreshes the prompt section and the gate from the same reading as the report.
@@ -805,7 +856,7 @@ async function renderStatus(ctx, config, options = {}) {
     .find((candidate) => candidate?.usable === true && inPlace(candidate.origin))
 
   if (target !== undefined) {
-    if (rows.every((row) => row.pwshPath === undefined) && resolvePwshPath(undefined, process.env, 'win32') === target.path) {
+    if (!liveStale && rows.every((row) => row.pwshPath === undefined) && resolvePwshPath(undefined, process.env, 'win32') === target.path) {
       lines.push(`PowerShell ${target.version} is in place at ${target.path}, and no executor row pins a path —`)
       lines.push('the pwsh tool picks it up natively. Nothing to configure.')
       return lines.join('\n')
@@ -814,8 +865,14 @@ async function renderStatus(ctx, config, options = {}) {
     const currentConfig = sourceRow?.config ?? {}
     const patchConfig = { ...currentConfig, pwshPath: target.path }
     const action = sourceRow === undefined ? 'add' : 'update'
-    lines.push(`To make the pwsh tool use PowerShell ${target.version} (${target.path}), ${action} this in the profile patch`)
-    lines.push('(~/.dsh/profiles/<profile>/cordis.patch.yml) and restart DSH:')
+    if (liveStale) {
+      lines.push(`The running executor still resolves to Windows PowerShell ${shellReading.version} (${shellReading.path});`)
+      lines.push(`PowerShell ${target.version} is available at ${target.path}. A running executor only re-resolves when`)
+      lines.push('its declared pwshPath changes, so pin it in the profile patch and reload DSH:')
+    } else {
+      lines.push(`To make the pwsh tool use PowerShell ${target.version} (${target.path}), ${action} this in the profile patch`)
+      lines.push('(~/.dsh/profiles/<profile>/cordis.patch.yml) and restart DSH:')
+    }
     lines.push('')
     lines.push(`- id: ${SOURCE_ROW_ID}`)
     lines.push('  config:')
@@ -1012,6 +1069,17 @@ async function installVerdict(ctx, config, result, after) {
       ? 'winget finished successfully.'
       : `winget reported failure (${result.detail}) — but the runtime is in place now. The Store can finish after winget exits; something else may also have installed it.`)
     lines.push(`PowerShell ${found.chosen.version} is now in place (${found.chosen.path}, ${labelOf(found.chosen)}).`)
+    const live = await shellRuntimeReading(ctx)
+    if (live?.version !== undefined && (majorOf(live.version) ?? 0) < MINIMUM_MAJOR) {
+      const refreshed = await refreshExecutorPath(ctx)
+      if (refreshed !== undefined) {
+        lines.push(`The running executor now resolves to PowerShell ${refreshed.version} (${refreshed.after}); the pwsh tool is ready.`)
+      } else {
+        lines.push(`The running executor still resolves to Windows PowerShell ${live.version} (${live.path}).`)
+        lines.push('Pin pwsh-sandbox.pwshPath in the active profile and reload DSH — a running executor only')
+        lines.push('re-resolves when its declared pwshPath changes; pwsh7_status prints the exact patch.')
+      }
+    }
     lines.push('If pwsh7_status still shows an executor row pinning an older path, remove that patch entry and')
     lines.push('restart DSH — or repin it at the version-stable path printed there.')
   } else {

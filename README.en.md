@@ -23,9 +23,13 @@ Disabling the plugin restores the default runtime; the plugin still never writes
 
 - The reading comes from the executor's own `ctx.shell.pwshPath`, not from config rows;
   `overridePath` only changes probing and recommendations, **not executor wiring**.
+- After an install the plugin first nudges the executor's cached `pwshPath`; only when that cache
+  is unavailable does it print the pin + reload instruction.
 - The install preflight is mandatory: winget present, an active network, and a non-metered
   connection. Metered / `Unknown` / a failed probe / no winget **start no install job** and name
   the network and the setting to turn off.
+- The Re-detect button lives beside the status title in the diagnostics section, not in the detail
+  page's head actions.
 - Configuration guidance prints a pasteable patch (add vs update, with a wholesale-`config`
   warning); `pwsh7_status` / `pwsh7_install` stay outside the gate as the recovery path.
 

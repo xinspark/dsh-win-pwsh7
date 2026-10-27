@@ -81,7 +81,7 @@ function makeStoreFixtures() {
  * which is what lets the gate prove the install tool returns *before* winget exits.
  * `jobs: false` omits the job registry entirely, to exercise the inline fallback.
  */
-function makeContext({ rows = [], versions = {}, deferred = false, jobs = false, shellPath, network = 'Unrestricted|FixtureNet' } = {}) {
+function makeContext({ rows = [], versions = {}, deferred = false, jobs = false, shellPath, shellObject, network = 'Unrestricted|FixtureNet' } = {}) {
   const registered = new Map()
   const spawned = []
   const terminated = []
@@ -107,6 +107,7 @@ function makeContext({ rows = [], versions = {}, deferred = false, jobs = false,
       if (key === 'jobs' && jobs) return jobRegistry
       // The pwsh tool executes through `ctx.shell`; the executor's own `pwshPath` is the
       // authoritative "what will run" fact. A context without it keeps the row-based reading.
+      if (key === 'shell' && shellObject !== undefined) return shellObject
       if (key === 'shell' && shellPath !== undefined) {
         return {
           pwshPath: shellPath,
@@ -311,6 +312,51 @@ check('the report reads the executor path, not the config rows', () => {
   assert.match(value.report, /via the executor \(C:\\Tools\\pwsh\.exe\)/u)
   assert.match(value.report, /PowerShell 7\.6\.9/u)
   assert.match(value.report, /Nothing to configure/u)
+})
+
+// An install that lands while the host is running leaves PwshLocalExecutor's cached 5.1 path in
+// place. The status must never call that "native" just because the resolver now finds a 7.
+const staleMachine = makeContext({
+  shellPath: POWERSHELL_51,
+  versions: { [POWERSHELL_51]: '5.1.26100', [ORDINARY]: '7.6.6' },
+})
+apply(staleMachine.ctx, { overridePath: ORDINARY })
+await flush()
+const staleReport = (await staleMachine.registered.get('pwsh7_status').execute({}, undefined)).report
+check('status: a live 5.1 executor is never reported as natively picked up', () => {
+  assert.match(staleReport, /running executor still resolves to Windows PowerShell 5\.1/u)
+  assert.ok(!/Nothing to configure/u.test(staleReport), `the stale executor was called native:\n${staleReport}`)
+  assert.match(staleReport, /pwshPath: 'C:\\Windows\\System32\\cmd\.exe'/u)
+})
+
+// The fix: a cache nudge makes the same getter re-run the resolver, so the tool becomes usable
+// without a profile pin or a restart.
+const paths = { current: POWERSHELL_51 }
+const nudgeShell = {
+  declaredPwshPath: undefined,
+  resolvedPwshPath: POWERSHELL_51,
+  config: { pwshPath: { get: () => undefined } },
+  get pwshPath() {
+    const declared = undefined
+    if (declared !== this.declaredPwshPath) {
+      this.resolvedPwshPath = paths.current
+      this.declaredPwshPath = declared
+    }
+    return this.resolvedPwshPath
+  },
+}
+const nudgeMachine = makeContext({
+  shellObject: nudgeShell,
+  versions: { [POWERSHELL_51]: '5.1.26100', [ORDINARY]: '7.6.6' },
+})
+apply(nudgeMachine.ctx, { overridePath: ORDINARY })
+paths.current = ORDINARY
+await flush()
+const nudgeReport = (await nudgeMachine.registered.get('pwsh7_status').execute({}, undefined)).report
+check('status: a cache nudge refreshes the live executor after an install', () => {
+  assert.match(nudgeReport, /PowerShell 7\.6\.6/u)
+  assert.ok(!/running executor still resolves to Windows PowerShell 5\.1/u.test(nudgeReport),
+    `the nudge did not refresh the executor:\n${nudgeReport}`)
 })
 
 // --- Rejections, and the two Store forms ------------------------------------------------

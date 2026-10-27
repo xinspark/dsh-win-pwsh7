@@ -130,6 +130,11 @@ async function run() {
     const descriptor = Object.getOwnPropertyDescriptor(pwshLocal.PwshLocalExecutor.prototype, 'pwshPath')
     assert.equal(typeof descriptor?.get, 'function', 'pwshPath getter disappeared — the gate source must fall back to shell.config.pwshPath.get() + resolvePwshPath()')
   })
+  check('PwshLocalExecutor keeps the declared/resolved path cache the refresh nudges', () => {
+    const text = source('dsh-pwsh-local')
+    assert.match(text, /declaredPwshPath/u)
+    assert.match(text, /resolvedPwshPath/u)
+  })
   check('PwshLocalExecutor.argv exists', () => assert.equal(typeof pwshLocal.PwshLocalExecutor.prototype.argv, 'function'))
 
   // ---- resolver: a configured path is trusted as-is ----------------------
