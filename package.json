@@ -47,7 +47,8 @@
     "windows"
   ],
   "scripts": {
-    "check": "node tools/check-host.mjs && node tools/check-client.mjs",
+    "check": "node tools/check-host.mjs && node tools/check-client.mjs && node tools/check-native-contracts.mjs",
+    "check:contracts": "node tools/check-native-contracts.mjs",
     "prepublishOnly": "npm run check"
   },
   "dsh": {
