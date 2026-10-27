@@ -34,9 +34,16 @@ Disabling the plugin restores the default runtime; the plugin still never writes
   Microsoft Store, and the manual Store page. Poll a job in **30-second rounds** with
   `job_output(wait:true, timeout_ms:30000)` + `job_list`; `wait aborted` is not a failure. The
   settled state is injected into the model context.
-- The install preflight is mandatory: winget present, an active network, and a non-metered
-  connection. Metered / `Unknown` / a failed probe / no winget **start no install job** and name
-  the network and the setting to turn off.
+- Manual install is spelled out: press Win+R, paste
+  `ms-windows-store://pdp/?ProductId=9MZ1SNWT0N5D`, press Enter, click Install (outside a VPN). A
+  manual install is detected automatically; no pin is needed.
+- The install preflight is mandatory: winget present, an active network, and neither metered nor
+  behind an active VPN. Metered / `Unknown` / a failed probe / no winget / VPN **start no install
+  job** and name the network or adapter plus the setting to turn off. VPN detection is a
+  name/default-route heuristic; a false positive still leaves the manual Store path.
+- When the gate blocks, the answer has three paths: **configure** an installed PowerShell 7
+  (`pwsh7_status` prints the `pwsh-sandbox.pwshPath` patch and reload), **install** (auto or
+  manual), or disable the plugin.
 - The Re-detect button lives beside the status title in the diagnostics section, not in the detail
   page's head actions.
 - Configuration guidance prints a pasteable patch (add vs update, with a wholesale-`config`

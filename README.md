@@ -19,6 +19,8 @@
 - 安装成功后先尝试刷新执行器缓存的 `pwshPath`；失败时才给「pin + 重载」的精确指引。
 - 自动安装失败时不再无条件归因计量：会重新读连接、翻译 Store 错误码；非计量失败直接指向「Store 已排队（暂停→恢复）」与手动 Store 链接，手动安装同样会被自动识别、无需 pin。
 - 自动安装可能一直停在 Store「排队中」：安装提示、进度行和失败文案都会给出「暂停→恢复」、关闭 VPN 并完全重启 Microsoft Store、以及手动 Store 链接；安装作业请用 **30 秒一轮**的 `job_output(wait:true, timeout_ms:30000)` + `job_list` 轮询，`wait aborted` 不是安装失败。安装结束后状态会注入模型上下文。
+- 安装预检同时检测 **VPN**：活动适配器名/描述命中常见 VPN/TUN 客户端、默认路由经过它，或 `Get-VpnConnection` 为连接状态时，会阻止自动安装，并给出「断开 VPN → 完全退出并重启 Microsoft Store → 重试」或「Win+R → 粘贴 Store 链接 → 安装」。这是名称启发式；即使误判，手动 Store 安装仍可用。
+- 被门禁拦住时给三条路：**配置已装的 PowerShell 7**（`pwsh7_status` 给出 `pwsh-sandbox.pwshPath` patch + 重载）、**安装**（`pwsh7_install` 或 Win+R 手动 Store）、**禁用插件**。
 - 配置引导给出可粘贴的 patch（区分 add / update，并警告 `config` 整体替换）；`pwsh7_status` / `pwsh7_install` 不受门禁，是恢复通道。
 - 详情页的「重新检测」就在状态区标题旁，不再单独占详情页头部动作。
 

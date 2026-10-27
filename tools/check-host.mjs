@@ -460,6 +460,9 @@ check('gate: Windows PowerShell 5.1 denies with report/install/config guidance',
   assert.match(reason, /Do not retry/u)
   assert.match(reason, /pwsh7_status/u)
   assert.match(reason, /pwsh7_install/u)
+  assert.match(reason, /pwsh-sandbox\.pwshPath/u)
+  assert.match(reason, /Win\+R/u)
+  assert.match(reason, /ms-windows-store:\/\/pdp/u)
   assert.match(reason, /disable dsh-win-pwsh7/u)
 })
 check('gate: a broken pin denies as cannot-start, naming the path', () => {
@@ -521,10 +524,12 @@ if (existsSync(MSI)) {
     assert.match(fallback.text, /parse errors/u)
     assert.match(fallback.report, /not usable/u)
   })
-  check('install path: the report offers exactly two ways forward, and no other installer', () => {
-    assert.match(fallback.report, /Two ways forward/u)
+  check('install path: the report offers install, configure and disable, and no other installer', () => {
+    assert.match(fallback.report, /Three ways forward/u)
     assert.match(fallback.report, /Install PowerShell 7 from the Microsoft Store/u)
     assert.match(fallback.report, /winget install --id 9MZ1SNWT0N5D --source msstore/u)
+    assert.match(fallback.report, /Win\+R/u)
+    assert.match(fallback.report, /pwsh-sandbox\.pwshPath/u)
     assert.match(fallback.report, /Disable this plugin/u)
     assert.ok(!/--source winget/u.test(fallback.report), 'no second installer may appear in the report')
     assert.ok(!/--installer-type wix/u.test(fallback.report), 'the MSI must not be offered at all')
@@ -763,6 +768,16 @@ if (existsSync(MSI)) {
   const noWingetReport = (await noWingetMachine.registered.get('pwsh7_install').execute({}, undefined)).report
   process.env.DSH_WIN_PWSH7_WINGET = savedWinget
 
+  const vpnMachine = makeContext({
+    rows: [executorRow(undefined)],
+    versions: {},
+    network: 'Unrestricted|FixtureNet|WireGuard',
+    deferred: true,
+    jobs: true,
+  })
+  apply(vpnMachine.ctx, {})
+  const vpnReport = (await vpnMachine.registered.get('pwsh7_install').execute({}, undefined)).report
+
   check('install preflight: an unrestricted connection starts the job', () => {
     assert.equal(clearMachine.jobSpecs.length, 1)
     assert.ok(!/not started/iu.test(clearReport), `the report blocked a usable connection: ${clearReport.slice(0, 240)}`)
@@ -770,6 +785,19 @@ if (existsSync(MSI)) {
   check('install preflight: a metered connection starts no job and names the fix', () => {
     assert.equal(meteredMachine.jobSpecs.length, 0)
     assert.match(meteredReport, /Install not started/u)
+    assert.match(meteredReport, /Win\+R/u)
+  })
+  check('install preflight: an active VPN starts no job and gives the manual Store path', () => {
+    assert.equal(vpnMachine.jobSpecs.length, 0)
+    assert.match(vpnReport, /VPN connection \("WireGuard"\)/u)
+    assert.match(vpnReport, /Win\+R/u)
+    assert.match(vpnReport, /ms-windows-store:\/\/pdp/u)
+    assert.match(vpnReport, /no pwshPath pin/u)
+  })
+  const vpnStatusReport = (await vpnMachine.registered.get('pwsh7_status').execute({}, undefined)).report
+  check('status: an active VPN is named before an install', () => {
+    assert.match(vpnStatusReport, /VPN connection \("WireGuard"\)/u)
+    assert.match(vpnStatusReport, /Win\+R/u)
   })
   check('install preflight: an unreadable cost is refused, not guessed', () => {
     assert.equal(unknownMachine.jobSpecs.length, 0)

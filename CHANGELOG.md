@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.13.4 — configure-it guidance, manual Store steps, VPN preflight
+
+Two gaps from the 2026-10-27 run: the blocked `pwsh` call mentioned install and disable but not the
+case where PowerShell 7 is already installed and only needs wiring, and the automatic install was
+also blocked by an active VPN while the plugin only understood metering.
+
+- **The denial and status now offer three ways.** When a usable PowerShell 7 is detectable, the
+  first answer is "configure the executor": call `pwsh7_status` for the exact
+  `pwsh-sandbox.pwshPath` patch, apply it to the active profile and reload DSH. Installing
+  (`pwsh7_install` or manual) and disabling stay available. The status report says
+  "Three ways forward" with the same split.
+- **Manual Store install is spelled out.** Every install path prints:
+  press Win+R, paste `ms-windows-store://pdp/?ProductId=9MZ1SNWT0N5D`, press Enter; outside a VPN the
+  Store page for PowerShell 7 opens — click Install. A manual install is auto-detected; no pin.
+  (The product id in the text is generated from `STORE_PRODUCT_ID`.)
+- **VPN is detected and intercepted.** The Windows PowerShell 5.1 probe now also inspects active
+  adapters whose name/description match common VPN/TUN clients, a default route through such an
+  adapter, and `Get-VpnConnection`. A reading of `Unrestricted|<profile>|WireGuard` (or any active
+  VPN) makes the install preflight refuse to start and returns: disconnect the VPN, fully quit and
+  restart Microsoft Store, retry; or use the manual Store steps. `pwsh7_status` shows the same
+  warning; a failed install re-checks and names the VPN if it appeared after the preflight.
+  The adapter-name match is a heuristic — a false positive still leaves the manual Store install.
+- **Tests.** The host gate asserts manual/configure text in the denial, a VPN preflight that starts
+  no job and names the adapter, and the VPN status warning.
+
 ## 0.13.3 — queued Store, VPN, 30-second polling, context injection
 
 The automatic Store download can sit in "Queued" indefinitely; the reports confirmed the cause is

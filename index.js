@@ -211,15 +211,29 @@ const STORE_PRODUCT_ID = '9MZ1SNWT0N5D'
 const METERED_COST = new Set(['Fixed', 'Variable'])
 
 /**
+ * Adapter names/descriptions that identify a VPN or a TUN/TAP tunnel. The Store frequently queues
+ * or fails while one is active; the user's own report confirmed that turning the VPN off and
+ * restarting the Store fixed it. This is deliberately a name heuristic: Windows offers no single
+ * public "is a VPN active" flag that covers third-party clients.
+ */
+const VPN_PATTERN = 'VPN|TAP|TUN|WireGuard|OpenVPN|Wintun|Tailscale|ZeroTier|Sangfor|EasyConnect|AnyConnect|FortiClient|GlobalProtect|Clash|Mihomo|V2Ray|Xray|Shadowsocks|Surge|Netch|Proxifier'
+
+/**
  * Ask the connection-cost API the Store itself consults, through Windows PowerShell 5.1 (always
- * present, and the only PowerShell that can reach WinRT from a script). The one line printed is
- * `<cost>|<profile>`; anything unreadable yields `undefined` and the caller stays silent rather
- * than guessing.
+ * present, and the only PowerShell that can reach WinRT from a script). It also inspects the active
+ * adapters and default route for a VPN/tunnel, because the Store's non-interactive handoff often
+ * stalls behind one. The one line printed is `<cost>|<profile>|<vpn>`; anything unreadable yields
+ * `undefined` and the caller stays silent rather than guessing.
  */
 const NETWORK_COST_SCRIPT = [
   '[Windows.Networking.Connectivity.NetworkInformation,Windows.Networking.Connectivity,ContentType=WindowsRuntime] | Out-Null',
   '$p = [Windows.Networking.Connectivity.NetworkInformation]::GetInternetConnectionProfile()',
-  'if ($p -eq $null) { "Unknown|" } else { $p.GetConnectionCost().NetworkCostType.ToString() + "|" + $p.ProfileName }',
+  '$vpn = ""',
+  `$a = Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Up" -and ($_.InterfaceDescription -match "${VPN_PATTERN}" -or $_.Name -match "${VPN_PATTERN}") } | Select-Object -First 1`,
+  'if ($a -ne $null) { $vpn = $a.InterfaceDescription; if ($vpn -eq "") { $vpn = $a.Name } }',
+  `if ($vpn -eq "") { $r = Get-NetRoute -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue | Where-Object { $_.InterfaceAlias -match "${VPN_PATTERN}" } | Select-Object -First 1; if ($r -ne $null) { $vpn = $r.InterfaceAlias } }`,
+  'if ($vpn -eq "") { $v = Get-VpnConnection -ErrorAction SilentlyContinue | Where-Object { $_.ConnectionStatus -eq "Connected" } | Select-Object -First 1; if ($v -ne $null) { $vpn = $v.Name } }',
+  'if ($p -eq $null) { "Unknown||" + $vpn } else { $p.GetConnectionCost().NetworkCostType.ToString() + "|" + $p.ProfileName + "|" + $vpn }',
 ].join('; ')
 
 /** The winget arguments for that one path. */
@@ -237,6 +251,9 @@ const STORE_COMMAND = `winget ${STORE_ARGS.join(' ')}`
 
 /** The Store product page, for the manual fallback when winget's non-interactive handoff fails. */
 const STORE_PROTOCOL = `ms-windows-store://pdp/?ProductId=${STORE_PRODUCT_ID}`
+
+/** The exact manual install the model should relay: Win+R, paste, Enter, click Install. */
+const MANUAL_STORE_STEPS = `press Win+R, paste ${STORE_PROTOCOL} and press Enter; outside a VPN the Store page for PowerShell 7 opens — click Install`
 
 /**
  * How long winget may sit after handing the install to the Microsoft Store before the progress line
@@ -396,7 +413,7 @@ export function apply(ctx, config) {
           // store route wait forever with no error anywhere. The cost (one Windows PowerShell 5.1
           // spawn) is paid only in this broken state, never on a healthy machine.
           if (status.chosen !== undefined) return { report }
-          const warning = await meteredWarning(ctx)
+          const warning = await networkWarning(ctx)
           return { report: warning === undefined ? report : `${warning}\n\n${report}` }
         }
       })))
@@ -743,23 +760,28 @@ async function refreshGate(ctx, config) {
  */
 function denialText(reading) {
   const at = reading.path === undefined ? '' : ` (${reading.path})`
-  const options = 'Do not retry. Tell the user PowerShell 7 must be installed or configured: call pwsh7_status for the exact profile patch, call pwsh7_install only after the user agrees, or disable dsh-win-pwsh7.'
+  const configure = 'configure the executor: call pwsh7_status for the exact pwsh-sandbox.pwshPath patch, apply it to the active profile and reload DSH'
+  const install = `install PowerShell 7: ask for pwsh7_install on an unmetered, non-VPN connection, or manually ${MANUAL_STORE_STEPS}`
+  const options = `Do not retry. Tell the user to ${configure}; or ${install}; or disable dsh-win-pwsh7.`
   switch (reading.reasonCode) {
     case 'windows-powershell': {
       const available = reading.recommended
       const state = available === undefined
         ? `the pwsh tool would run Windows PowerShell ${reading.version}${at}`
         : `PowerShell ${available.version} is available at ${available.path}, but the executor would run Windows PowerShell ${reading.version}${at}`
-      return `dsh-win-pwsh7 blocked this call: ${state}. ${options}`
+      const paths = available === undefined
+        ? options
+        : `Do not retry. Tell the user to ${configure}; if that is not possible, ${install}; or disable dsh-win-pwsh7.`
+      return `dsh-win-pwsh7 blocked this call: ${state}. ${paths}`
     }
     case 'broken-pin':
-      return `dsh-win-pwsh7 blocked this call: the pwsh tool cannot start — the executor pins ${reading.path}, which does not exist. Do not retry. Tell the user to replace or remove that pwshPath (pwsh7_status prints the patch), install PowerShell 7, or disable this plugin.`
+      return `dsh-win-pwsh7 blocked this call: the pwsh tool cannot start — the executor pins ${reading.path}, which does not exist. Do not retry. Tell the user to replace or remove that pwshPath (${configure}); or ${install}; or disable this plugin.`
     case 'no-ps7':
-      return `dsh-win-pwsh7 blocked this call: no PowerShell 7 is installed or detectable, so the pwsh tool would fall back to Windows PowerShell 5.1. ${options}`
+      return `dsh-win-pwsh7 blocked this call: no PowerShell 7 is installed or detectable, so the pwsh tool would fall back to Windows PowerShell 5.1. ${options} If PowerShell 7 is installed in a custom location, pass that path to pwsh7_status.`
     case 'detecting':
       return 'dsh-win-pwsh7 is still detecting the PowerShell runtime; the call was not executed. Do not retry; call pwsh7_status, then try again.'
     default:
-      return `dsh-win-pwsh7 blocked this call: the PowerShell runtime could not be determined${at}. Do not retry; call pwsh7_status to re-detect, then install PowerShell 7, fix the pinned path, or disable this plugin.`
+      return `dsh-win-pwsh7 blocked this call: the PowerShell runtime could not be determined${at}. Do not retry; call pwsh7_status to re-detect, then ${configure}, ${install}, or disable this plugin.`
   }
 }
 
@@ -925,13 +947,15 @@ async function renderStatus(ctx, config, options = {}) {
       lines.push(`The configured auto-install did not produce a usable PowerShell 7: ${options.installAttempt.detail}`)
     }
   }
-  lines.push('Two ways forward:')
+  lines.push('Three ways forward:')
   lines.push('  1. Install PowerShell 7 from the Microsoft Store — ask for pwsh7_install (this plugin runs it),')
   lines.push(`     or run it yourself: ${STORE_COMMAND}`)
-  lines.push(`     Or open the Store page directly: ${STORE_PROTOCOL}`)
-  lines.push('     It checks the connection first: Windows defers Store downloads on a connection marked as')
-  lines.push('     metered, so turn "Metered connection" off for that network if this machine is metered.')
-  for (const line of DISABLE_PATH) lines.push(line === DISABLE_PATH[0] ? `  2. ${line}` : `     ${line}`)
+  lines.push(`     Manual install: ${MANUAL_STORE_STEPS}.`)
+  lines.push('     It refuses to start on a metered connection or behind an active VPN; a manual Store')
+  lines.push('     install is detected automatically, with no pwshPath pin needed.')
+  lines.push('  2. If PowerShell 7 is already installed elsewhere, configure the executor: call pwsh7_status')
+  lines.push('     with that path for the exact pwsh-sandbox.pwshPath patch, then reload DSH.')
+  for (const line of DISABLE_PATH) lines.push(line === DISABLE_PATH[0] ? `  3. ${line}` : `     ${line}`)
   return lines.join('\n')
 }
 
@@ -962,6 +986,7 @@ async function preflightInstall(ctx) {
   if (reading === undefined) return { ok: false, code: 'network-unknown' }
   if (METERED_COST.has(reading.cost)) return { ok: false, code: 'metered', reading }
   if (reading.cost === 'Unknown' || reading.profile === '') return { ok: false, code: 'network-unknown', reading }
+  if (reading.vpn !== undefined) return { ok: false, code: 'vpn', reading }
   return { ok: true, winget, reading }
 }
 
@@ -969,6 +994,7 @@ async function preflightInstall(ctx) {
 function installBlockedDetail(pre) {
   if (pre.code === 'no-winget') return 'winget was not found on PATH'
   if (pre.code === 'metered') return `the ${pre.reading?.profile === undefined || pre.reading.profile === '' ? 'active' : `"${pre.reading.profile}"`} connection is marked as metered`
+  if (pre.code === 'vpn') return `a VPN connection ("${pre.reading?.vpn ?? 'unknown'}") is active`
   return 'the connection cost could not be determined'
 }
 
@@ -984,7 +1010,7 @@ function installBlockedReport(pre) {
     return [
       'Install not started: winget was not found on PATH. Install "App Installer" from the Microsoft',
       `Store, or run it yourself after installing it: ${STORE_COMMAND}`,
-      `Manual Store page: ${STORE_PROTOCOL} — the plugin detects a manual Store install automatically.`,
+      `Manual install: ${MANUAL_STORE_STEPS}. The plugin detects it automatically.`,
     ].join(' ')
   }
   if (pre.code === 'metered') {
@@ -996,9 +1022,18 @@ function installBlockedReport(pre) {
       '(for Ethernet: Settings → Network & Internet → Ethernet → that network → the same switch).',
       'Then run pwsh7_install again; it re-checks and starts only after the connection reports Unrestricted.',
       'To verify the reading, run pwsh7_status; the metered warning disappears when the setting is off.',
-      `If the probe keeps failing, run it manually: ${STORE_COMMAND}`,
-      `Or open the Store page: ${STORE_PROTOCOL} — the plugin detects a manual install automatically.`,
+      `Manual install: ${MANUAL_STORE_STEPS}.`,
+      ...(pre.reading.vpn === undefined ? [] : [`A VPN ("${pre.reading.vpn}") is also active; disconnect it before retrying.`]),
       'Do not switch to another installer — the Store package is the only path this plugin supports.',
+    ].join(' ')
+  }
+  if (pre.code === 'vpn') {
+    return [
+      `Install not started: a VPN connection ("${pre.reading.vpn}") is active. Microsoft Store downloads`,
+      'often queue or fail behind a VPN; the Store handoff can sit in "Queued" with no error.',
+      'Disconnect the VPN, fully quit and restart Microsoft Store, then run pwsh7_install again.',
+      `Or install manually: ${MANUAL_STORE_STEPS}.`,
+      'A manual Store install is detected automatically; no pwshPath pin is needed.',
     ].join(' ')
   }
   return [
@@ -1006,7 +1041,7 @@ function installBlockedReport(pre) {
     'probe failed or returned Unknown). Check that the machine is online and that the active network\'s',
     '"Metered connection" switch is off, then retry. If the probe keeps failing, run it manually:',
     STORE_COMMAND,
-    `Or open the Store page: ${STORE_PROTOCOL} — the plugin detects a manual install automatically.`,
+    `Manual install: ${MANUAL_STORE_STEPS}.`,
   ].join(' ')
 }
 
@@ -1063,8 +1098,8 @@ async function runInstall(ctx, config, exec) {
     'Read progress in 30-second rounds: job_output(wait:true, timeout_ms:30000), then job_list; a',
     'wait aborted is not an install failure. Stop it with job_kill. If the Store entry says "Queued",',
     'pause and resume it; if the Store itself is stuck, disable any VPN, fully quit and restart',
-    'Microsoft Store, or install manually:',
-    STORE_PROTOCOL,
+    'Microsoft Store, or install manually.',
+    `Manual install: ${MANUAL_STORE_STEPS}.`,
     'A manual Store install is detected automatically; no pwshPath pin is needed.',
     'The Store downloads only when Windows lets it: the preflight above confirmed the active connection',
     'is not metered, and winget may exit non-zero while the Store still finishes the work.',
@@ -1131,15 +1166,19 @@ async function installVerdict(ctx, config, result, after) {
     if (metered) {
       lines.push('The active connection is still marked as metered, so Windows may be deferring the Store download.')
       lines.push('Turn "Metered connection" off for that network and run this again. If the Store entry is already')
-      lines.push(`queued, pause and resume it there. Manual install after that: ${STORE_PROTOCOL}`)
+      lines.push('queued, pause and resume it there.')
+      lines.push(`Manual install after that: ${MANUAL_STORE_STEPS}.`)
     } else {
       lines.push(network === undefined
         ? 'The connection cost could not be re-read, so this failure is not being attributed to metering.'
         : 'The connection is not metered now, so the Store handoff — not the connection — is the likely weak link.')
+      if (network?.vpn !== undefined) {
+        lines.push(`A VPN connection ("${network.vpn}") is active; disconnect it, fully quit and restart Microsoft`)
+        lines.push('Store, then retry.')
+      }
       lines.push('Open Microsoft Store → Downloads/Library. If the PowerShell entry says "Queued", pause and resume it;')
-      lines.push('also check that Windows Update is not paused and that the Store is signed in. If the Store itself')
-      lines.push('is stuck, disable any VPN, fully quit and restart Microsoft Store, then retry.')
-      lines.push(`A manual Store install works and is detected automatically — no pwshPath pin is needed: ${STORE_PROTOCOL}`)
+      lines.push('also check that Windows Update is not paused and that the Store is signed in.')
+      lines.push(`Manual install: ${MANUAL_STORE_STEPS}. A manual Store install is detected automatically — no pwshPath pin is needed.`)
     }
   }
   return lines
@@ -1687,13 +1726,14 @@ async function installViaWinget(ctx, graceMs) {
 }
 
 /**
- * The connection cost the Microsoft Store itself consults, plus the profile it belongs to.
+ * The connection cost the Microsoft Store itself consults, the profile it belongs to, and the
+ * active VPN/tunnel name when one is visible.
  *
  * Read through Windows PowerShell 5.1, which is always present and the only PowerShell that can
  * reach WinRT from a script. Every failure yields `undefined`: the caller adds no warning rather
  * than a guess.
  * @param ctx - the row's Host context.
- * @returns `{ cost, profile }` where cost is one of the four `NetworkCostType` names, or `undefined`.
+ * @returns `{ cost, profile, vpn? }`, or `undefined`.
  */
 async function networkCost(ctx) {
   const executable = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
@@ -1718,8 +1758,12 @@ async function networkCost(ctx) {
   try {
     const outcome = await handle.done
     if (outcome.exitCode !== 0) return undefined
-    const reading = /^(Unknown|Unrestricted|Fixed|Variable)\|(.*)$/u.exec((handle.collected.stdout?.readFrom(0).text ?? '').trim())
-    return reading === null ? undefined : { cost: reading[1], profile: reading[2] }
+    const text = (handle.collected.stdout?.readFrom(0).text ?? '').trim()
+    let reading = /^(Unknown|Unrestricted|Fixed|Variable)\|([^|]*)\|(.*)$/u.exec(text)
+    if (reading === null) reading = /^(Unknown|Unrestricted|Fixed|Variable)\|(.*)$/u.exec(text)
+    if (reading === null) return undefined
+    const vpn = reading[3]?.trim()
+    return { cost: reading[1], profile: reading[2], ...(vpn === undefined || vpn.length === 0 ? {} : { vpn }) }
   } catch (error) {
     handle.terminate()
     ctx.logger?.warn?.('dsh-win-pwsh7: reading the connection cost failed: %s', describe(error))
@@ -1728,26 +1772,36 @@ async function networkCost(ctx) {
 }
 
 /**
- * The warning a metered connection earns before the `store` route starts, or `undefined` when that
- * route can proceed. Measured behaviour, not theory: with the connection marked metered the Store
- * accepted the install, logged no error at all, and never downloaded it — the request carried
- * `AllowDownloadOnAnyNetwork = 0`, so Windows was deferring it deliberately. Un-marking the
- * connection made the same non-interactive route finish in under a minute.
+ * The warnings a metered connection or an active VPN earns before the `store` route starts.
+ * Measured, not theory: with the connection marked metered the Store accepted the install, logged
+ * no error, and never downloaded it; with a VPN active the Store handoff queued instead. Both
+ * remedies are connection-level, not another installer.
  * @param ctx - the row's Host context.
  * @returns the warning text, or `undefined`.
  */
-async function meteredWarning(ctx) {
+async function networkWarning(ctx) {
   const reading = await networkCost(ctx)
-  if (reading === undefined || !METERED_COST.has(reading.cost)) return undefined
-  const named = reading.profile.length === 0 ? 'This connection' : `The "${reading.profile}" connection`
-  return [
-    `${named} is marked as metered ("Metered connection"), and Windows defers Microsoft Store`,
-    'downloads on metered connections: this install will very likely sit queued and never finish by',
-    'itself, with no error anywhere. The fix is the connection setting, not another installer: turn',
-    '"Metered connection" off for this network (Settings → Network & Internet → Wi-Fi → that network)',
-    'and run this again. PowerShell comes from the Microsoft Store, which is the only way this plugin',
-    'recommends, because Windows keeps that package up to date by itself.',
-  ].join(' ')
+  if (reading === undefined) return undefined
+  const warnings = []
+  if (METERED_COST.has(reading.cost)) {
+    const named = reading.profile.length === 0 ? 'This connection' : `The "${reading.profile}" connection`
+    warnings.push([
+      `${named} is marked as metered ("Metered connection"), and Windows defers Microsoft Store`,
+      'downloads on metered connections: this install will very likely sit queued and never finish by',
+      'itself, with no error anywhere. The fix is the connection setting, not another installer: turn',
+      '"Metered connection" off for this network (Settings → Network & Internet → Wi-Fi → that network)',
+      'and run this again. Manual install after that:',
+      `Win+R → ${STORE_PROTOCOL} → Enter → Install.`,
+    ].join(' '))
+  }
+  if (reading.vpn !== undefined) {
+    warnings.push([
+      `A VPN connection ("${reading.vpn}") is active. Microsoft Store downloads often queue or fail`,
+      'behind a VPN. Disconnect it, fully quit and restart Microsoft Store, then retry; if you need',
+      `the VPN, install manually: Win+R → ${STORE_PROTOCOL} → Enter → Install.`,
+    ].join(' '))
+  }
+  return warnings.length === 0 ? undefined : warnings.join(' ')
 }
 
 /**
