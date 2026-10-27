@@ -165,6 +165,11 @@ check('the card renders every hint in Chinese', () => {
 check('the summary view renders nothing, as the row list expects', () => {
   assert.equal(card({ view: 'summary' }), null)
 })
+check('the configure surface is one flat section, not a card inside the native page', () => {
+  const sections = elementsOf(cardTree, 'section')
+  assert.equal(sections.length, 1, `expected one section, found ${sections.length}`)
+  assert.equal(sections[0].props.className, 'dw7-section')
+})
 
 // A second application with no controller for this row — the state that used to throw inside the
 // render (`form.subscribe` on undefined). The card must report the Host's "unavailable" state.
@@ -238,13 +243,18 @@ check('the en dictionary carries no Chinese', () => {
   const cjk = en.match(/[\u4e00-\u9fff]/gu)
   assert.equal(cjk, null, `Chinese in the en dictionary: ${cjk === null ? '' : cjk.join('')}`)
 })
-check('both style blocks define the button, so it is styled wherever it renders', () => {
-  for (const name of ['CSS_CARD', 'CSS_DIAG']) {
-    const start = source.indexOf(`const ${name} = \``)
-    const body = source.slice(start, source.indexOf('`', start + 20))
-    assert.ok(start > 0 && /\.dw7-btn\{/u.test(body),
-      `${name} does not define .dw7-btn, so a button rendered without the card is unstyled`)
+check('one flat stylesheet covers both sections and keeps the native control scale', () => {
+  assert.ok(/const CSS = `/u.test(source), 'the shared stylesheet is missing')
+  assert.ok(!/CSS_CARD|CSS_DIAG/u.test(source), 'the old per-card stylesheets survived')
+  for (const selector of ['.dw7-section{', '.dw7-input{', '.dw7-save{', '.dw7-small{', '.dw7-code{']) {
+    assert.ok(source.includes(selector), `the stylesheet does not define ${selector}`)
   }
+  const start = source.indexOf('const CSS = `')
+  const css = source.slice(start, source.indexOf('`', start + 20))
+  assert.ok(!/#[0-9a-f]{3,8}\b/iu.test(css), 'the stylesheet hard-codes a color instead of using a theme token')
+})
+check('no metered-network copy or branch remains', () => {
+  assert.ok(!/metered/iu.test(source), 'the removed metered-network feature still has copy or a branch')
 })
 
 check('every t() key the client asks for exists in both dictionaries', () => {
@@ -326,18 +336,18 @@ remoteAnswer = () => Promise.resolve({ ok: true, value: { report: [
   '- id: pwsh-sandbox',
   '  config:',
   "    pwshPath: 'C:\\\\Tools\\\\pwsh.exe'",
-  '',
-  'Network: "FixtureNet" — marked as metered (Fixed); Microsoft Store installs are deferred.',
 ].join('\n') } })
 remoteButton.props.onClick()
 await new Promise((resolve) => setTimeout(resolve, 0))
 const fixTexts = textsOf(remoteSection({ subject: { pkg: 'dsh-win-pwsh7' } }))
 
-check('the diagnostics section exposes the network cause and a copyable patch', () => {
-  assert.ok(fixTexts.includes(dictionaries.zh.network_metered), 'no network line for a metered report')
+check('the diagnostics section exposes a copyable patch without shipping a log box', () => {
   assert.ok(fixTexts.includes(dictionaries.zh.patch_note), 'no guidance above the patch')
   assert.ok(fixTexts.includes(dictionaries.zh.copy_patch), 'no copy-patch button')
   assert.ok(fixTexts.some((text) => text.includes('pwshPath')), 'the patch text is missing')
+  const blocks = elementsOf(remoteSection({ subject: { pkg: 'dsh-win-pwsh7' } }), 'pre')
+  assert.equal(blocks.length, 1, `expected exactly the patch code block, found ${blocks.length}`)
+  assert.equal(blocks[0].props.className, 'dw7-code')
 })
 
 remoteAnswer = () => Promise.resolve({ ok: false, error: { code: 'E-NOT-AVAILABLE', message: 'not mounted' } })

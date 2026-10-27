@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.16.5 — native plugin detail page
+
+- The plugin page's two sections now match the native detail page instead of drawing their own
+  cards: flat sections, 14px/500 section titles, the page's 32px section rhythm, 34px native inputs,
+  28px outline actions for Re-detect and Copy, and the native settings-form Save/Reset with matching
+  focus rings.
+- The status report is native body text rather than a scrollable log box; the pasteable patch keeps
+  a compact native code block and copy action.
+- Removed the stale metered-network warning and its dictionary entries — the feature was already
+  gone, but the client still carried its copy.
+- The plugin card/detail description now describes the current behaviour (script or manual Store
+  install; no metered preflight).
+
 ## 0.16.4 — make the companion recommendation an instruction to the model
 
 - The completed script-install verdict now begins the companion text with `ACTION REQUIRED:`: the

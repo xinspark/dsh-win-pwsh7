@@ -1,8 +1,8 @@
 {
   "name": "dsh-win-pwsh7",
-  "version": "0.16.4",
+  "version": "0.16.5",
   "type": "module",
-  "description": "Detect, validate, and (on request) install PowerShell 7 for the Harness pwsh tool on Windows — the self-updating Microsoft Store package by default, with the connection checked first because Windows defers Store downloads on a metered connection — and pin the version-stable Store family alias.",
+  "description": "Detect and validate PowerShell 7 for the Harness pwsh tool on Windows, and install it on request through the Microsoft Store — scripted or manual — while the pwsh tool stays blocked until a PowerShell 7 runtime actually resolves.",
   "license": "MIT",
   "icon": "./icon.svg",
   "repository": {

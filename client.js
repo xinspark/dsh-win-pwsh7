@@ -1,5 +1,6 @@
-// client.js — the browser half of dsh-win-pwsh7: the configure card, the diagnostics
-// section, and the re-detect action on the plugin pages.
+// client.js — the browser half of dsh-win-pwsh7: the configure section, the diagnostics
+// section, and the re-detect action on the plugin pages. Both render as flat native detail
+// sections — no card chrome, and the host page's own 32px section rhythm does the spacing.
 //
 // One operation, two callers: the diagnostics section and the re-detect button call the
 // same Host method (`status`) that the `pwsh7_status` agent tool runs — over the Remote
@@ -89,7 +90,6 @@ window.__ModuleLoader__.load({
       unwritable: 'The Host is not accepting writes for this row.',
       error_remote_unavailable: 'the Remote service is not available in this deployment',
       error_endpoint_missing: 'the status endpoint is not mounted',
-      network_metered: 'Network: metered — turn off "Metered connection" for this network, then Re-detect.',
       copy_patch: 'Copy patch',
       copied: 'Copied',
       copy_failed: 'Copy failed — select the patch text and copy it manually.',
@@ -115,59 +115,46 @@ window.__ModuleLoader__.load({
       unwritable: 'Host 当前不接受该行的写入。',
       error_remote_unavailable: '本部署没有可用的 Remote 服务',
       error_endpoint_missing: '状态端点未挂载',
-      network_metered: '网络：计量连接——关闭该网络的「按流量计费的连接」后重新检测。',
       copy_patch: '复制补丁',
       copied: '已复制',
       copy_failed: '复制失败——请手动选中补丁文本复制。',
       patch_note: '把这段粘贴进 profile 补丁并重启 DSH；config 会整体替换该行的配置。',
     }
 
-    const CSS_CARD = `
-.dw7-card{display:flex;flex-direction:column;gap:14px;padding:16px;background:var(--dsw-alias-bg-layer-1);border:1px solid var(--dsw-alias-border-l1);border-radius:8px;}
-.dw7-card-title{color:var(--dsw-alias-label-primary);font-size:14px;font-weight:600;margin:0;}
-.dw7-field{display:flex;flex-direction:column;gap:4px;min-width:0;}
-.dw7-label{color:var(--dsw-alias-label-primary);font-size:13px;font-weight:600;}
-.dw7-hint{color:var(--dsw-alias-label-secondary);font-size:12px;line-height:1.5;}
-.dw7-inputrow{display:flex;align-items:center;gap:8px;}
-.dw7-input{flex:1;min-width:0;background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l1);border-radius:6px;color:var(--dsw-alias-label-primary);padding:6px 10px;font-size:13px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;}
-.dw7-input:focus{outline:none;border-color:var(--dsw-alias-brand-primary);}
-.dw7-input:disabled{opacity:.55;}
-.dw7-switch{position:relative;width:36px;height:20px;border-radius:10px;border:none;background:var(--dsw-alias-border-l1);cursor:pointer;padding:0;flex:none;}
-.dw7-switch[aria-checked="true"]{background:var(--dsw-alias-brand-primary);}
-.dw7-switch:disabled{opacity:.55;cursor:default;}
-.dw7-knob{position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--dsw-alias-bg-base);transition:left .15s ease;}
-.dw7-switch[aria-checked="true"] .dw7-knob{left:18px;}
-.dw7-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
-.dw7-btn{background:var(--dsw-alias-brand-primary);color:var(--dsw-alias-bg-base);border:none;border-radius:6px;padding:6px 14px;font-size:13px;cursor:pointer;}
-.dw7-btn:disabled{opacity:.55;cursor:default;}
-.dw7-btn-ghost{background:transparent;color:var(--dsw-alias-label-secondary);border:1px solid var(--dsw-alias-border-l1);}
-.dw7-ok{color:var(--dsw-alias-state-success-primary);font-size:12px;}
-.dw7-note{color:var(--dsw-alias-state-error-primary);font-size:12px;}
-`
-
-    const CSS_DIAG = `
-/* The Re-detect button lives in this section's own slot group ({@link RedetectAction}) but the
-   page it renders on may never render the configure card, so the button rules are defined here as
-   well as in CSS_CARD: a style element only applies while it is mounted. */
-.dw7-diag{display:flex;flex-direction:column;gap:8px;padding:16px;background:var(--dsw-alias-bg-layer-1);border:1px solid var(--dsw-alias-border-l1);border-radius:8px;min-width:0;}
-.dw7-diag-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;}
-.dw7-diag-title{color:var(--dsw-alias-label-primary);font-size:14px;font-weight:600;}
-.dw7-diag-at{color:var(--dsw-alias-label-secondary);font-size:12px;}
-.dw7-diag-redetect{margin-left:auto;}
-.dw7-diag-report{margin:0;padding:12px;background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l1);border-radius:6px;color:var(--dsw-alias-label-primary);font-size:12px;line-height:1.55;white-space:pre-wrap;word-break:break-all;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;max-height:320px;overflow:auto;}
-.dw7-diag-err{color:var(--dsw-alias-state-error-primary);font-size:12px;}
-.dw7-diag-idle{color:var(--dsw-alias-label-secondary);font-size:12px;}
-.dw7-diag-net{color:var(--dsw-alias-label-primary);font-size:12px;line-height:1.5;border-left:3px solid var(--dsw-alias-state-error-primary);padding-left:8px;}
-.dw7-diag-fix{display:flex;flex-direction:column;gap:6px;padding:10px;background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l1);border-radius:6px;min-width:0;}
-.dw7-diag-fix-title{color:var(--dsw-alias-label-secondary);font-size:12px;line-height:1.5;}
-.dw7-diag-patch{margin:0;padding:10px;background:var(--dsw-alias-bg-layer-1);border:1px solid var(--dsw-alias-border-l1);border-radius:4px;color:var(--dsw-alias-label-primary);font-size:12px;line-height:1.5;white-space:pre-wrap;word-break:break-all;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;max-height:180px;overflow:auto;}
-.dw7-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
-/* The Re-detect button belongs to this section's slot group, and the page it renders on may never
-   render the configure card — so the button rules are defined here as well as in CSS_CARD, because
-   a style element only applies while it is mounted. */
-.dw7-btn{background:var(--dsw-alias-brand-primary);color:var(--dsw-alias-bg-base);border:none;border-radius:6px;padding:6px 14px;font-size:13px;cursor:pointer;}
-.dw7-btn:disabled{opacity:.55;cursor:default;}
-.dw7-btn-ghost{background:transparent;color:var(--dsw-alias-label-secondary);border:1px solid var(--dsw-alias-border-l1);}
+    // One native detail-section stylesheet for both contributions. A style element only applies
+    // while its section is mounted, so both sections carry it: a page can render the status
+    // section without ever rendering the configure section.
+    const CSS = `
+.dw7-section{display:flex;flex-direction:column;gap:12px;min-width:0;}
+.dw7-head{display:flex;align-items:baseline;gap:10px;min-width:0;}
+.dw7-title{margin:0;color:var(--dsw-alias-label-primary);font-size:14px;font-weight:500;line-height:20px;}
+.dw7-count{color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px;}
+.dw7-head-action{margin-left:auto;flex:none;align-self:center;}
+.dw7-field{display:flex;flex-direction:column;gap:6px;padding:12px 0;min-width:0;}
+.dw7-field + .dw7-field{border-top:.5px solid var(--dsw-alias-border-l2);}
+.dw7-label{color:var(--dsw-alias-label-primary);font-size:13px;font-weight:500;line-height:1.5;}
+.dw7-input{box-sizing:border-box;width:100%;height:34px;padding:0 12px;border:.5px solid var(--dsw-alias-border-l4);border-radius:var(--dsw-radius-md);background:var(--dsw-alias-bg-layer-3);font-family:inherit;font-size:13px;line-height:1.5;color:var(--dsw-alias-label-primary);}
+.dw7-input:focus-visible{outline:none;border-color:var(--dsw-alias-state-business-primary);}
+.dw7-input:disabled{color:var(--dsw-alias-label-tertiary);cursor:default;}
+.dw7-hint{margin:0;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:1.5;}
+.dw7-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding-top:4px;}
+.dw7-save{appearance:none;border:1px solid transparent;border-radius:var(--dsw-radius-md);padding:5px 14px;font:inherit;font-size:13px;line-height:1.5;cursor:pointer;background:var(--dsw-alias-label-primary);color:var(--dsw-alias-bg-layer-3);}
+.dw7-save:disabled{opacity:.4;cursor:default;}
+.dw7-save:focus-visible,.dw7-reset:focus-visible,.dw7-small:focus-visible{outline:var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:1px;}
+.dw7-reset{border:none;background:none;padding:0;font:inherit;font-size:12px;line-height:1.5;color:var(--dsw-alias-label-secondary);cursor:pointer;}
+.dw7-reset:hover:not(:disabled){color:var(--dsw-alias-label-primary);}
+.dw7-reset:disabled{cursor:default;}
+.dw7-small{box-sizing:border-box;height:28px;padding:0 10px;border:.5px solid var(--dsw-alias-border-l3);border-radius:var(--dsw-radius-sm);background:transparent;font:inherit;font-size:12px;line-height:18px;color:var(--dsw-alias-label-primary);cursor:pointer;}
+.dw7-small:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover);}
+.dw7-small:disabled{opacity:.4;cursor:not-allowed;}
+.dw7-report{margin:0;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere;}
+.dw7-empty{margin:0;color:var(--dsw-alias-label-tertiary);font-size:13px;line-height:20px;}
+.dw7-error{margin:0;color:var(--dsw-alias-state-error-primary);font-size:12px;line-height:18px;overflow-wrap:anywhere;}
+.dw7-ok{margin:0;color:var(--dsw-alias-state-success-primary);font-size:12px;line-height:1.5;}
+.dw7-patch{display:flex;flex-direction:column;gap:8px;min-width:0;}
+.dw7-patch-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0;}
+.dw7-patch-note{margin:0;flex:1;min-width:0;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:1.5;}
+.dw7-code{box-sizing:border-box;margin:0;padding:10px 12px;border:.5px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-md);background:var(--dsw-alias-bg-layer-3);color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-mono,ui-monospace,SFMono-Regular,Menlo,monospace);font-size:12px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere;}
 `
 
     return {
@@ -241,14 +228,6 @@ window.__ModuleLoader__.load({
 
         // ---- components ----
 
-        /** One diagnostics line per snapshot state — an if-chain, so each state maps to one line. */
-        function bodyFor(snap, t) {
-          if (snap.state === 'loading' && !snap.report) return t('status_loading')
-          if (snap.report !== null && snap.report !== '') return snap.report
-          if (snap.error !== null) return t('status_error', { error: snap.error })
-          return '' // the idle line below carries this message, once
-        }
-
         /** The profile patch a report carries, when it offers one, without the prose around it. */
         function patchFromReport(report) {
           if (typeof report !== 'string') return null
@@ -269,10 +248,8 @@ window.__ModuleLoader__.load({
             // eslint-disable-next-line react-hooks/exhaustive-deps
           }, [active])
           if (!active) return null
-          const body = bodyFor(snap, t)
           const report = typeof snap.report === 'string' ? snap.report : ''
           const patch = patchFromReport(report)
-          const metered = /Metered connection|marked as metered/u.test(report)
           async function copyPatch() {
             try {
               if (globalThis.navigator?.clipboard?.writeText === undefined) throw new Error('clipboard unavailable')
@@ -283,28 +260,30 @@ window.__ModuleLoader__.load({
               setCopyNote(t('copy_failed'))
             }
           }
-          return h('section', { className: 'dw7-diag' },
-            h('style', null, CSS_DIAG),
-            h('div', { className: 'dw7-diag-head' },
-              h('span', { className: 'dw7-diag-title' }, t('diagnostics_title')),
-              snap.at ? h('span', { className: 'dw7-diag-at' }, t('refreshed_at', { at: snap.at })) : null,
+          return h('section', { className: 'dw7-section' },
+            h('style', null, CSS),
+            h('div', { className: 'dw7-head' },
+              h('h4', { className: 'dw7-title' }, t('diagnostics_title')),
+              snap.at ? h('span', { className: 'dw7-count' }, t('refreshed_at', { at: snap.at })) : null,
               h('button', {
-                className: 'dw7-btn dw7-btn-ghost dw7-diag-redetect',
+                className: 'dw7-small dw7-head-action',
                 onClick: () => void refresh(),
                 disabled: snap.state === 'loading',
               }, snap.state === 'loading' ? t('redetecting') : t('redetect'))),
-            h('pre', { className: 'dw7-diag-report' }, body),
-            metered ? h('div', { className: 'dw7-diag-net' }, t('network_metered')) : null,
+            report !== ''
+              ? h('p', { className: 'dw7-report' }, report)
+              : snap.error !== null
+                ? h('p', { className: 'dw7-error' }, t('status_error', { error: snap.error }))
+                : h('p', { className: 'dw7-empty' }, snap.state === 'loading' ? t('status_loading') : t('status_empty')),
+            snap.error !== null && report !== '' ? h('p', { className: 'dw7-error' }, t('status_error', { error: snap.error })) : null,
             patch !== null
-              ? h('div', { className: 'dw7-diag-fix' },
-                h('div', { className: 'dw7-diag-fix-title' }, t('patch_note')),
-                h('pre', { className: 'dw7-diag-patch' }, patch),
-                h('div', { className: 'dw7-actions' },
-                  h('button', { className: 'dw7-btn dw7-btn-ghost', onClick: () => void copyPatch() }, copied ? t('copied') : t('copy_patch')),
-                  copyNote ? h('span', { className: 'dw7-note' }, copyNote) : null))
+              ? h('div', { className: 'dw7-patch' },
+                h('div', { className: 'dw7-patch-head' },
+                  h('p', { className: 'dw7-patch-note' }, t('patch_note')),
+                  h('button', { className: 'dw7-small', onClick: () => void copyPatch() }, copied ? t('copied') : t('copy_patch')),
+                  copyNote ? h('span', { className: 'dw7-error' }, copyNote) : null),
+                h('pre', { className: 'dw7-code' }, patch))
               : null,
-            snap.error !== null && snap.report ? h('div', { className: 'dw7-diag-err' }, t('status_error', { error: snap.error })) : null,
-            snap.report === null && snap.error === null && snap.state !== 'loading' ? h('div', { className: 'dw7-diag-idle' }, t('status_empty')) : null,
           )
         }
 
@@ -353,38 +332,38 @@ window.__ModuleLoader__.load({
             }
           }
 
-          return h('div', { className: 'dw7-card' },
-            h('style', null, CSS_CARD),
-            h('p', { className: 'dw7-card-title' }, t('card_title')),
+          return h('section', { className: 'dw7-section' },
+            h('style', null, CSS),
+            h('div', { className: 'dw7-head' },
+              h('h4', { className: 'dw7-title' }, t('card_title'))),
             loading || unavailable
-              ? h('p', { className: 'dw7-hint' }, loading ? t('form_loading') : t('form_unavailable'))
+              ? h('p', { className: 'dw7-empty' }, loading ? t('form_loading') : t('form_unavailable'))
               : [
                 h('div', { className: 'dw7-field', key: 'overridePath' },
                   h('label', { className: 'dw7-label', htmlFor: 'dw7-override-path' }, t('field_overridePath')),
-                  h('div', { className: 'dw7-inputrow' },
-                    h('input', {
-                      id: 'dw7-override-path',
-                      className: 'dw7-input',
-                      type: 'text',
-                      spellCheck: false,
-                      value: values.overridePath,
-                      disabled: !editable,
-                      placeholder: 'C:\\Program Files\\PowerShell\\7\\pwsh.exe',
-                      onChange: (event) => {
-                        setDraft({ overridePath: event.target.value })
-                        setNote(null)
-                        setSavedAt(null)
-                      },
-                    })),
-                  h('span', { className: 'dw7-hint' }, t('overridePath_hint'))),
+                  h('input', {
+                    id: 'dw7-override-path',
+                    className: 'dw7-input',
+                    type: 'text',
+                    spellCheck: false,
+                    value: values.overridePath,
+                    disabled: !editable,
+                    placeholder: 'C:\\Program Files\\PowerShell\\7\\pwsh.exe',
+                    onChange: (event) => {
+                      setDraft({ overridePath: event.target.value })
+                      setNote(null)
+                      setSavedAt(null)
+                    },
+                  }),
+                  h('p', { className: 'dw7-hint' }, t('overridePath_hint'))),
                 h('div', { className: 'dw7-actions', key: 'actions' },
                   h('button', {
-                    className: 'dw7-btn',
+                    className: 'dw7-save',
                     onClick: () => void save(),
                     disabled: !editable || (!dirty && note === null),
                   }, t('save')),
                   h('button', {
-                    className: 'dw7-btn dw7-btn-ghost',
+                    className: 'dw7-reset',
                     onClick: () => {
                       setDraft(null)
                       setNote(null)
@@ -392,9 +371,9 @@ window.__ModuleLoader__.load({
                     },
                     disabled: !editable || (!dirty && note === null),
                   }, t('reset')),
-                  snap.writable === false ? h('span', { className: 'dw7-note' }, t('unwritable')) : null,
+                  snap.writable === false ? h('span', { className: 'dw7-error' }, t('unwritable')) : null,
                   savedAt ? h('span', { className: 'dw7-ok' }, t('saved', { at: savedAt })) : null,
-                  note ? h('span', { className: 'dw7-note' }, note) : null),
+                  note ? h('span', { className: 'dw7-error' }, note) : null),
               ],
           )
         }
@@ -418,7 +397,7 @@ window.__ModuleLoader__.load({
           return () => {
             for (const dispose of disposers) dispose?.()
           }
-        }, 'dsh-win-pwsh7: plugin page cards')
+        }, 'dsh-win-pwsh7: plugin page sections')
       },
     }
   },

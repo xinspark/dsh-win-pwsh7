@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "PowerShell 7 for Windows",
-    "description": "Detects, validates, and (on request) installs PowerShell 7 for the pwsh tool on Windows: the self-updating Microsoft Store package by default, with the connection cost checked first, because Windows defers Store downloads on a metered connection."
+    "description": "Detects and validates PowerShell 7 for the pwsh tool on Windows, and installs it on request through the Microsoft Store — scripted or manual. The pwsh tool stays blocked until PowerShell 7 is actually resolved."
   }
 }

@@ -48,7 +48,7 @@ instead of trusting this table.
 | The install job handle exposes `append` and `updateProgress` | `dsh-jobs-local/lib/index.js:412-439`: `start(spec)` validates kind/label, builds `handle = { append, updateProgress }`, calls `spec.run(handle)` | The existing install job spec is compatible; `jobs.start` requires a job controller for the owner | install job |
 | `configEditor.entries()` only exposes `include`-owned rows | `dsh-config-editor/lib/index.js:30-35` filters `entry.parent.tree.ctx.fiber.entry?.id === "include"`; `:69-135` `edit` writes the profile patch | A Desktop-generated live executor row may not be addressable; scanning rows is not a reliable "what runs" source | report / config guidance |
 | The pwsh prompt section has a stable placement | `dsh-system-prompt/lib/index.js:10-43`, `TOOL_PWSH: 1010`; `SystemPrompt.getSectionOrder` | `getSectionOrder('TOOL_PWSH')` is the right anchor for `tool:pwsh-runtime` | prompt |
-| Client slots used by the page still exist | live `Slots.listSubTree`: `plugins.row.config` (key `dsh-win-pwsh7#win-pwsh7`), `plugins.detail.section` (`dsh-win-pwsh7.diagnostics`, order 50) | The detail page and config card remain registered; the Re-detect button renders inside the diagnostics section, and `plugins.detail.actions` is no longer used by this plugin | client |
+| Client slots used by the page still exist | live `Slots.listSubTree`: `plugins.row.config` (key `dsh-win-pwsh7#win-pwsh7`), `plugins.detail.section` (`dsh-win-pwsh7.diagnostics`, order 50) | The detail page and configure section remain registered; the Re-detect button renders inside the diagnostics section, and `plugins.detail.actions` is no longer used by this plugin | client |
 
 ## Findings that changed the plan
 
@@ -80,8 +80,6 @@ gate is green. Do not claim a build is verified against a DSH version the gate h
 
 ## Known limits
 
-- The network-cost check (`NetworkCostType` through Windows PowerShell 5.1 + WinRT) is a **plugin
-  gap-fill**: DSH has no network-cost service. It is documented here as L2, not as a native fact.
 - The rc.2 → rc.3 delta has no per-package snapshot in this repository; the table is the rc.3
   baseline. If a future upgrade needs the delta, capture the previous table before bumping.
 - The client slot names are checked against the live page, not by this gate; the client half's own
