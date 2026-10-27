@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.13.3 — queued Store, VPN, 30-second polling, context injection
+
+The automatic Store download can sit in "Queued" indefinitely; the reports confirmed the cause is
+the Store client/queue, not the plugin's preflight. This release makes that state actionable and
+stops the model from waiting on one long `job_output` call.
+
+- **The queue is a first-class recovery path.** The install start report, the 2-minute progress
+  hint, and the failure verdict all say: pause/resume the PowerShell entry in Microsoft Store →
+  Downloads/Library; if the Store itself is stuck, disable any VPN, fully quit and restart Microsoft
+  Store; or install manually from `ms-windows-store://pdp/?ProductId=9MZ1SNWT0N5D`. A manual Store
+  install is detected automatically, no `pwshPath` pin.
+- **The model is told to poll in 30-second rounds.** `pwsh7_install` now says
+  `job_output(wait:true, timeout_ms:30000)` then `job_list`; a `wait aborted` is not an install
+  failure. This is guidance for the model, not a change to the job's own 15-second progress tick.
+- **The settled state is injected into the agent context.** When the background job finishes, the
+  owning agent receives a short `agent.inject()` note (feature-detected): runtime now effective,
+  install failed with the queue/VPN/manual options, or installed-but-still-pinned. The prompt
+  section alone could not tell a model that stopped looking.
+- **The queue hint names VPN.** The progress line after `Started MSStore package execution` now
+  includes pause/resume, VPN off + restart Store, and the Windows Update pause check.
+- **Tests.** The install start report carries the 30-second/`timeout_ms:30000`/VPN text; the
+  settled failure injects a note into a stub agent.
+
 ## 0.13.2 — the Store handoff is named correctly
 
 The 2026-10-27 work-exp reports showed the automatic install failing on a **non-metered**

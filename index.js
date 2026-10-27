@@ -49,6 +49,7 @@ import { lstatSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { Service } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
+import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { resolvePwshPath } from '@deepseek-ai/dsh-pwsh-local'
 import z from '@deepseek-ai/schemastery'
 
@@ -1059,9 +1060,14 @@ async function runInstall(ctx, config, exec) {
 
   return [
     `Installing PowerShell 7 from the Microsoft Store in the background as job ${id}.`,
-    'Read its progress and output with job_output; stop it with job_kill. The Store downloads only',
-    'when Windows lets it: the preflight above confirmed the active connection is not metered, and',
-    'winget may exit non-zero while the Store still finishes the work.',
+    'Read progress in 30-second rounds: job_output(wait:true, timeout_ms:30000), then job_list; a',
+    'wait aborted is not an install failure. Stop it with job_kill. If the Store entry says "Queued",',
+    'pause and resume it; if the Store itself is stuck, disable any VPN, fully quit and restart',
+    'Microsoft Store, or install manually:',
+    STORE_PROTOCOL,
+    'A manual Store install is detected automatically; no pwshPath pin is needed.',
+    'The Store downloads only when Windows lets it: the preflight above confirmed the active connection',
+    'is not metered, and winget may exit non-zero while the Store still finishes the work.',
     'The plugin re-checks the runtime after winget exits and again when the job settles, so a late',
     'finish is still reported as installed. pwsh7_status shows the current reading at any time.',
   ].join('\n')
@@ -1131,7 +1137,8 @@ async function installVerdict(ctx, config, result, after) {
         ? 'The connection cost could not be re-read, so this failure is not being attributed to metering.'
         : 'The connection is not metered now, so the Store handoff — not the connection — is the likely weak link.')
       lines.push('Open Microsoft Store → Downloads/Library. If the PowerShell entry says "Queued", pause and resume it;')
-      lines.push('also check that Windows Update is not paused and that the Store is signed in.')
+      lines.push('also check that Windows Update is not paused and that the Store is signed in. If the Store itself')
+      lines.push('is stuck, disable any VPN, fully quit and restart Microsoft Store, then retry.')
       lines.push(`A manual Store install works and is detected automatically — no pwshPath pin is needed: ${STORE_PROTOCOL}`)
     }
   }
@@ -1151,6 +1158,7 @@ async function installVerdict(ctx, config, result, after) {
 function installJobSpec(ctx, config, exec) {
   let handle
   const startedAt = Date.now()
+  const agent = exec?.agent
   const elapsed = () => `${Math.max(1, Math.round((Date.now() - startedAt) / 60000))}m`
   return {
     kind: INSTALL_KIND,
@@ -1185,7 +1193,7 @@ function installJobSpec(ctx, config, exec) {
         if (handed) logState.storeHandedAt ??= Date.now()
         else logState.storeHandedAt = undefined
         if (handed && Date.now() - logState.storeHandedAt >= STORE_QUEUE_HINT_MS) {
-          parts.push('the Store entry may be queued — open Microsoft Store → Downloads/Library, pause and resume it; also check Windows Update is not paused')
+          parts.push('the Store entry may be queued — open Microsoft Store → Downloads/Library, pause and resume it; if the Store is still stuck, disable VPN and restart Microsoft Store; also check Windows Update is not paused')
         }
         if (stalled()) {
           parts.push('nothing has moved for a while — the Store may be queued (open Microsoft Store → Downloads/Library, pause and resume), or the connection may be metered; job_kill, then check both')
@@ -1223,6 +1231,27 @@ function installJobSpec(ctx, config, exec) {
             // probe stops that loop too — `job_kill` during the re-probe used to be ignored.
             const after = await awaitRuntime(ctx, config, job, () => cancelled)
             const verdict = await installVerdict(ctx, config, result, after)
+            // Inject the settled state into the owning agent's next step: a background install can
+            // finish long after the model stopped looking, and the prompt section alone would not
+            // tell it that the gate changed. Best-effort; a composition without `inject` simply
+            // keeps the status tool as the source.
+            const live = after.chosen === undefined ? undefined : await shellRuntimeReading(ctx)
+            const ready = live?.version !== undefined && (majorOf(live.version) ?? 0) >= MINIMUM_MAJOR
+            const note = after.chosen === undefined
+              ? 'dsh-win-pwsh7: the Store install did not land; the pwsh tool remains blocked. If the Store entry is queued, pause and resume it; if the Store is stuck, disable VPN and restart it; a manual Store install is detected automatically.'
+              : ready
+                ? `dsh-win-pwsh7: PowerShell ${after.chosen.version} is now effective; the pwsh tool is unblocked.`
+                : `dsh-win-pwsh7: PowerShell ${after.chosen.version} is installed, but the running executor still resolves to an older runtime; pin pwsh-sandbox.pwshPath and reload DSH (pwsh7_status prints the patch).`
+            if (typeof agent?.inject === 'function') {
+              try {
+                agent.inject(createUserMessage({
+                  content: [{ type: 'text', text: note }],
+                  source: { kind: 'user' },
+                }))
+              } catch (error) {
+                ctx.logger?.warn?.('dsh-win-pwsh7: could not inject the install result: %s', describe(error))
+              }
+            }
             // Do not probe here: the next `pwsh` call (or the status page) refreshes through
             // pre-execute. Invalidating the timestamp is enough to make that refresh happen, and
             // it keeps a settling install from adding probes to an unrelated gate.

@@ -106,6 +106,11 @@ async function run() {
   const jobs = await import('@deepseek-ai/dsh-jobs-local')
   const configEditor = await import('@deepseek-ai/dsh-config-editor')
   const toolPwsh = await import('@deepseek-ai/dsh-tool-pwsh')
+  const llm = await import('@deepseek-ai/dsh-llm')
+
+  check('createUserMessage is exported for agent.inject()', () => {
+    assert.equal(typeof llm.createUserMessage, 'function')
+  })
 
   // ---- tool registry: guard is global, monotonic, and lands as an error --
   check('defineTool is exported', () => assert.equal(typeof tools.defineTool, 'function'))

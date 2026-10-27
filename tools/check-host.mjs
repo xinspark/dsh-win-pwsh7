@@ -614,7 +614,27 @@ if (existsSync(MSI)) {
   check('install: the Store install runs as a background job and the call returns at once', () => {
     assert.match(startedReport, /background as job pwsh7-1/u)
     assert.match(startedReport, /job_output/u)
+    assert.match(startedReport, /30-second/u)
+    assert.match(startedReport, /timeout_ms:30000/u)
+    assert.match(startedReport, /VPN/u)
     assert.ok(!/finished successfully/u.test(startedReport), 'the call must not wait for the install')
+  })
+
+  // The settle happens after the model stopped looking; the owning agent gets a short note so the
+  // next step knows the gate changed.
+  const injected = []
+  const agentStub = { id: 'agent-test', inject(text) { injected.push(text) } }
+  const injectMachine = makeContext({ rows: [executorRow(undefined)], versions: {}, deferred: true, jobs: true })
+  apply(injectMachine.ctx, {})
+  await injectMachine.registered.get('pwsh7_install').execute({}, { agent: agentStub })
+  const injectStub = { progress: [], appended: [], updateProgress() {}, append() {} }
+  const injectHooks = injectMachine.jobSpecs[0].run(injectStub)
+  injectMachine.settleAll()
+  await injectHooks.done
+  check('install job: the settled state is injected into the agent context', () => {
+    assert.ok(injected.length > 0, 'the install result was never injected')
+    const text = injected[0]?.content?.[0]?.text ?? ''
+    assert.match(text, /pwsh tool remains blocked/u)
   })
   check('install job: kind, label, both output streams, and a runnable body', () => {
     assert.equal(spec.kind, 'pwsh7')

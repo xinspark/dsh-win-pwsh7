@@ -29,6 +29,11 @@ Disabling the plugin restores the default runtime; the plugin still never writes
   translates the Store error code, and on a non-metered connection points at the Store queue
   (pause → resume) and the manual Store page. A manual install is detected automatically; no pin
   is needed.
+- The automatic download can sit in the Store's "Queued" state: the start report, the progress
+  hint and the failure verdict all offer pause → resume, disable any VPN and fully restart
+  Microsoft Store, and the manual Store page. Poll a job in **30-second rounds** with
+  `job_output(wait:true, timeout_ms:30000)` + `job_list`; `wait aborted` is not a failure. The
+  settled state is injected into the model context.
 - The install preflight is mandatory: winget present, an active network, and a non-metered
   connection. Metered / `Unknown` / a failed probe / no winget **start no install job** and name
   the network and the setting to turn off.
