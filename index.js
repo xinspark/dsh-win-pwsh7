@@ -574,13 +574,16 @@ class Pwsh7Dispatch extends Service {
   }
 
   /**
-   * One Remote endpoint: the current status report.
-   * @returns a promise for `{ report }`, or an explicit message when the row is not active.
+   * One Remote endpoint: the current status report and the gate snapshot the page renders as facts.
+   * @returns a promise for `{ report, gate }`, or an explicit message when the row is not active.
    */
   status() {
     const ctx = hostContext
     if (ctx === null) return Promise.resolve({ report: 'The dsh-win-pwsh7 row is not active.' })
-    return renderStatus(ctx, readRowConfig(ctx, undefined)).then((report) => ({ report }))
+    return renderStatus(ctx, readRowConfig(ctx, undefined)).then((report) => {
+      const gate = runtimeState(ctx).gate
+      return { report, gate: { ...gate, ...(gate.recommended === undefined ? {} : { recommended: { ...gate.recommended } }) } }
+    })
   }
 }
 
@@ -708,7 +711,7 @@ function gateFromReading(reading, rows, status) {
   const recommended = candidate === undefined
     ? undefined
     : { path: candidate.path, version: candidate.version, origin: candidate.origin }
-  const base = { version, path, source, at, recommended }
+  const base = { version, path, source, origin: reading?.origin, at, recommended }
 
   if (version !== undefined && (majorOf(version) ?? 0) >= MINIMUM_MAJOR) {
     return { ...base, state: 'allow', reasonCode: 'ok' }

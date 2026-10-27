@@ -72,10 +72,27 @@ window.__ModuleLoader__.load({
 
     const DICT_EN = {
       diagnostics_title: 'PowerShell 7 status',
-      status_loading: 'Detecting…',
-      status_empty: 'No report yet — press Re-detect.',
       status_error: 'Detection failed: {error}',
       refreshed_at: 'refreshed {at}',
+      status_ready: 'Ready',
+      status_denied: 'Blocked',
+      status_detecting: 'Detecting',
+      status_row_status: 'Status',
+      status_row_runtime: 'Runtime',
+      status_row_path: 'Executor',
+      status_no_runtime: 'PowerShell 7 not found',
+      status_no_path: 'Not resolved',
+      status_lead_ready: 'The pwsh tool is allowed and will use the runtime below.',
+      status_lead_windows: 'The pwsh tool is blocked: the executor still resolves to Windows PowerShell {version}.',
+      status_lead_no_ps7: 'The pwsh tool is blocked: no usable PowerShell 7 was found.',
+      status_lead_broken: 'The pwsh tool is blocked: the executor pins a path that does not exist.',
+      status_lead_unknown: 'The PowerShell runtime the executor will use could not be determined.',
+      status_lead_detecting: 'Detecting the PowerShell runtime…',
+      status_note_ready: 'The pwsh tool is allowed only when the executor really resolves PowerShell 7 or newer.',
+      status_note_store: 'The path is the version-stable Store family alias, so Store updates do not move it. AppInfo activation is undocumented; if it stops working, run pwsh7_install or pin an ordinary pwsh.exe.',
+      status_note_denied: 'Press Re-detect to refresh; or have the model call pwsh7_status for the wiring patch and install guidance.',
+      status_note_broken: 'Replace or remove that pwshPath, or run pwsh7_install again.',
+      status_note_detecting: 'The first detection usually finishes quickly.',
       redetect: 'Re-detect',
       redetecting: 'Detecting…',
       card_title: 'Configuration',
@@ -97,10 +114,27 @@ window.__ModuleLoader__.load({
     }
     const DICT_ZH = {
       diagnostics_title: 'PowerShell 7 状态',
-      status_loading: '检测中…',
-      status_empty: '尚无报告——点「重新检测」。',
       status_error: '检测失败：{error}',
       refreshed_at: '刷新于 {at}',
+      status_ready: '已就绪',
+      status_denied: '未就绪',
+      status_detecting: '检测中',
+      status_row_status: '状态',
+      status_row_runtime: '运行时',
+      status_row_path: '执行器',
+      status_no_runtime: '未检测到 PowerShell 7',
+      status_no_path: '未解析到路径',
+      status_lead_ready: 'pwsh 工具已放行，将使用下面的运行时执行。',
+      status_lead_windows: 'pwsh 工具已被拦截：执行器仍解析到 Windows PowerShell {version}。',
+      status_lead_no_ps7: 'pwsh 工具已被拦截：没有可用的 PowerShell 7。',
+      status_lead_broken: 'pwsh 工具已被拦截：执行器 pin 的路径不可用。',
+      status_lead_unknown: '尚无法确认执行器将运行的 PowerShell 版本。',
+      status_lead_detecting: '正在检测 PowerShell 运行时…',
+      status_note_ready: '只有实际解析到 PowerShell 7 及以上时，pwsh 工具才会放行。',
+      status_note_store: '该路径是版本稳定的 Store 家族别名，Store 更新不会移动它。AppInfo 激活是未公开行为；如果失效，请运行 pwsh7_install 或 pin 普通 pwsh.exe。',
+      status_note_denied: '点「重新检测」刷新；或让模型调用 pwsh7_status 获取接线补丁与安装指引。',
+      status_note_broken: '请更换或移除该 pwshPath，或重新运行 pwsh7_install。',
+      status_note_detecting: '首次检测通常很快。',
       redetect: '重新检测',
       redetecting: '检测中…',
       card_title: '配置',
@@ -128,8 +162,18 @@ window.__ModuleLoader__.load({
 .dw7-section{display:flex;flex-direction:column;gap:12px;min-width:0;}
 .dw7-head{display:flex;align-items:baseline;gap:10px;min-width:0;}
 .dw7-title{margin:0;color:var(--dsw-alias-label-primary);font-size:14px;font-weight:500;line-height:20px;}
-.dw7-count{color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px;}
-.dw7-head-action{margin-left:auto;flex:none;align-self:center;}
+.dw7-status{box-sizing:border-box;display:flex;flex-direction:column;gap:10px;padding:14px;border:.5px solid var(--dsw-alias-border-l1);border-radius:10px;font-size:13px;min-width:0;}
+.dw7-status-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;min-width:0;}
+.dw7-status-title{flex:none;color:var(--dsw-alias-label-primary);font-size:13px;font-weight:600;line-height:20px;}
+.dw7-status-metric{color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px;}
+.dw7-status-action{margin-left:auto;flex:none;}
+.dw7-estimate{display:grid;gap:10px;padding:12px;border-radius:8px;background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-secondary);font-size:13px;line-height:1.6;min-width:0;}
+.dw7-estimate p{margin:0;}
+.dw7-facts{display:grid;gap:6px;margin:0;}
+.dw7-facts>div{display:grid;grid-template-columns:72px minmax(0,1fr);gap:10px;}
+.dw7-facts dt{color:var(--dsw-alias-label-tertiary);}
+.dw7-facts dd{margin:0;overflow-wrap:anywhere;}
+.dw7-note{color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:1.6;}
 .dw7-field{display:flex;flex-direction:column;gap:6px;padding:12px 0;min-width:0;}
 .dw7-field + .dw7-field{border-top:.5px solid var(--dsw-alias-border-l2);}
 .dw7-label{color:var(--dsw-alias-label-primary);font-size:13px;font-weight:500;line-height:1.5;}
@@ -179,7 +223,7 @@ window.__ModuleLoader__.load({
         const formSnapshot = form === undefined ? () => ABSENT_FORM_SNAPSHOT : () => form.getSnapshot()
 
         // ---- shared diagnostics store: one snapshot for the section and the action ----
-        let snapshot = { state: 'idle', report: null, error: null, at: null }
+        let snapshot = { state: 'idle', report: null, error: null, at: null, gate: null }
         const listeners = new Set()
         const diagnostics = {
           get: () => snapshot,
@@ -217,12 +261,13 @@ window.__ModuleLoader__.load({
         async function refresh() {
           const previous = snapshot
           if (previous.state === 'loading') return
-          diagnostics.set({ state: 'loading', report: previous.report, error: null, at: previous.at })
+          diagnostics.set({ state: 'loading', report: previous.report, error: null, at: previous.at, gate: previous.gate })
           try {
             const out = await callStatus()
-            diagnostics.set({ state: 'ready', report: typeof out?.report === 'string' ? out.report : '', error: null, at: new Date().toLocaleTimeString() })
+            const gate = out?.gate !== null && typeof out?.gate === 'object' ? out.gate : null
+            diagnostics.set({ state: 'ready', report: typeof out?.report === 'string' ? out.report : '', error: null, at: new Date().toLocaleTimeString(), gate })
           } catch (error) {
-            diagnostics.set({ state: 'error', report: previous.report, error: describe(error), at: previous.at })
+            diagnostics.set({ state: 'error', report: previous.report, error: describe(error), at: previous.at, gate: previous.gate })
           }
         }
 
@@ -235,6 +280,57 @@ window.__ModuleLoader__.load({
           if (start < 0) return null
           const end = report.indexOf('\n\n', start)
           return report.slice(start, end < 0 ? undefined : end).trimEnd()
+        }
+
+        /** Map the Host gate onto the short status card: lead sentence, status facts, footnote. */
+        function statusView(gate, t) {
+          const reason = gate?.reasonCode
+          if (gate === null || gate === undefined || gate.state === 'unknown' || reason === 'detecting') {
+            return {
+              status: t('status_detecting'),
+              runtime: t('status_no_runtime'),
+              lead: t('status_lead_detecting'),
+              note: t('status_note_detecting'),
+            }
+          }
+          if (gate.state === 'allow') {
+            return {
+              status: t('status_ready'),
+              runtime: gate.version === undefined ? t('status_no_runtime') : `PowerShell ${gate.version}`,
+              lead: t('status_lead_ready'),
+              note: gate.origin === 'store-alias' ? t('status_note_store') : t('status_note_ready'),
+            }
+          }
+          if (reason === 'windows-powershell') {
+            return {
+              status: t('status_denied'),
+              runtime: gate.version === undefined ? t('status_no_runtime') : `Windows PowerShell ${gate.version}`,
+              lead: t('status_lead_windows', { version: gate.version ?? '' }),
+              note: t('status_note_denied'),
+            }
+          }
+          if (reason === 'broken-pin') {
+            return {
+              status: t('status_denied'),
+              runtime: t('status_no_runtime'),
+              lead: t('status_lead_broken'),
+              note: t('status_note_broken'),
+            }
+          }
+          if (reason === 'no-ps7') {
+            return {
+              status: t('status_denied'),
+              runtime: t('status_no_runtime'),
+              lead: t('status_lead_no_ps7'),
+              note: t('status_note_denied'),
+            }
+          }
+          return {
+            status: t('status_denied'),
+            runtime: t('status_no_runtime'),
+            lead: t('status_lead_unknown'),
+            note: t('status_note_denied'),
+          }
         }
 
         function DiagnosticsSection(props) {
@@ -250,6 +346,11 @@ window.__ModuleLoader__.load({
           if (!active) return null
           const report = typeof snap.report === 'string' ? snap.report : ''
           const patch = patchFromReport(report)
+          const view = statusView(snap.gate, t)
+          const path = typeof snap.gate?.path === 'string' && snap.gate.path !== '' ? snap.gate.path : null
+          // A client half can briefly run against an older Host half (HMR or a skipped restart):
+          // that Host answers only `report`, so fall back to it instead of inventing facts.
+          const fallback = (snap.gate === null || snap.gate === undefined) && report !== ''
           async function copyPatch() {
             try {
               if (globalThis.navigator?.clipboard?.writeText === undefined) throw new Error('clipboard unavailable')
@@ -260,30 +361,41 @@ window.__ModuleLoader__.load({
               setCopyNote(t('copy_failed'))
             }
           }
-          return h('section', { className: 'dw7-section' },
+          const patchBlock = patch !== null
+            ? h('div', { className: 'dw7-patch' },
+              h('div', { className: 'dw7-patch-head' },
+                h('p', { className: 'dw7-patch-note' }, t('patch_note')),
+                h('button', { className: 'dw7-small', onClick: () => void copyPatch() }, copied ? t('copied') : t('copy_patch')),
+                copyNote ? h('span', { className: 'dw7-error' }, copyNote) : null),
+              h('pre', { className: 'dw7-code' }, patch))
+            : null
+          return h('section', { className: 'dw7-status' },
             h('style', null, CSS),
-            h('div', { className: 'dw7-head' },
-              h('h4', { className: 'dw7-title' }, t('diagnostics_title')),
-              snap.at ? h('span', { className: 'dw7-count' }, t('refreshed_at', { at: snap.at })) : null,
+            h('div', { className: 'dw7-status-head' },
+              h('strong', { className: 'dw7-status-title' }, t('diagnostics_title')),
+              snap.at ? h('span', { className: 'dw7-status-metric' }, t('refreshed_at', { at: snap.at })) : null,
               h('button', {
-                className: 'dw7-small dw7-head-action',
+                className: 'dw7-small dw7-status-action',
                 onClick: () => void refresh(),
                 disabled: snap.state === 'loading',
               }, snap.state === 'loading' ? t('redetecting') : t('redetect'))),
-            report !== ''
+            fallback
               ? h('p', { className: 'dw7-report' }, report)
-              : snap.error !== null
-                ? h('p', { className: 'dw7-error' }, t('status_error', { error: snap.error }))
-                : h('p', { className: 'dw7-empty' }, snap.state === 'loading' ? t('status_loading') : t('status_empty')),
-            snap.error !== null && report !== '' ? h('p', { className: 'dw7-error' }, t('status_error', { error: snap.error })) : null,
-            patch !== null
-              ? h('div', { className: 'dw7-patch' },
-                h('div', { className: 'dw7-patch-head' },
-                  h('p', { className: 'dw7-patch-note' }, t('patch_note')),
-                  h('button', { className: 'dw7-small', onClick: () => void copyPatch() }, copied ? t('copied') : t('copy_patch')),
-                  copyNote ? h('span', { className: 'dw7-error' }, copyNote) : null),
-                h('pre', { className: 'dw7-code' }, patch))
-              : null,
+              : h('div', { className: 'dw7-estimate' },
+                h('p', null, view.lead),
+                h('dl', { className: 'dw7-facts' },
+                  h('div', { key: 'status' },
+                    h('dt', null, t('status_row_status')),
+                    h('dd', null, view.status)),
+                  h('div', { key: 'runtime' },
+                    h('dt', null, t('status_row_runtime')),
+                    h('dd', null, view.runtime)),
+                  h('div', { key: 'path' },
+                    h('dt', null, t('status_row_path')),
+                    h('dd', null, path ?? t('status_no_path')))),
+                h('small', { className: 'dw7-note' }, view.note)),
+            patchBlock,
+            snap.error !== null ? h('p', { className: 'dw7-error' }, t('status_error', { error: snap.error })) : null,
           )
         }
 

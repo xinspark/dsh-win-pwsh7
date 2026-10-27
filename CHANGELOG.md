@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.16.6 — status card matching the official provider card
+
+- The status section is now a native bordered card with an inner estimate/facts surface, matching
+  the official speech-to-text provider card: card title, three facts (status, runtime, executor),
+  footnote, and the compact Re-detect action.
+- The Remote `status` endpoint now also returns the Host gate snapshot, so the card renders facts
+  instead of the model-facing report. The client falls back to the report when an older Host
+  answers without it.
+- When the gate is present the raw report is no longer shown; the pasteable wiring patch remains
+  available in the card.
+
 ## 0.16.5 — native plugin detail page
 
 - The plugin page's two sections now match the native detail page instead of drawing their own

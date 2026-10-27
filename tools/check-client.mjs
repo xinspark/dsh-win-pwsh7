@@ -217,11 +217,13 @@ check('the missing-controller callbacks keep a stable identity across renders', 
 
 const diagnosticsTexts = textsOf(diagnostics({ subject: { pkg: 'dsh-win-pwsh7' } }))
 
-check('the diagnostics section renders its localized title and idle text', () => {
+check('the diagnostics section renders its localized title and detecting state', () => {
   assert.ok(diagnosticsTexts.includes(dictionaries.zh.diagnostics_title),
     'the diagnostics section does not render its title from the dictionary')
-  assert.ok(diagnosticsTexts.includes(dictionaries.zh.status_empty),
-    'the diagnostics section does not render its idle text from the dictionary')
+  assert.ok(diagnosticsTexts.includes(dictionaries.zh.status_detecting),
+    'the diagnostics section does not render its detecting state')
+  assert.ok(diagnosticsTexts.includes(dictionaries.zh.status_lead_detecting),
+    'the diagnostics section does not render its detecting lead')
 })
 check('the diagnostics section stays out of other plugins pages', () => {
   assert.equal(diagnostics({ subject: { pkg: 'some-other-plugin' } }), null)
@@ -246,7 +248,7 @@ check('the en dictionary carries no Chinese', () => {
 check('one flat stylesheet covers both sections and keeps the native control scale', () => {
   assert.ok(/const CSS = `/u.test(source), 'the shared stylesheet is missing')
   assert.ok(!/CSS_CARD|CSS_DIAG/u.test(source), 'the old per-card stylesheets survived')
-  for (const selector of ['.dw7-section{', '.dw7-input{', '.dw7-save{', '.dw7-small{', '.dw7-code{']) {
+  for (const selector of ['.dw7-section{', '.dw7-status{', '.dw7-estimate{', '.dw7-facts{', '.dw7-input{', '.dw7-save{', '.dw7-small{', '.dw7-code{']) {
     assert.ok(source.includes(selector), `the stylesheet does not define ${selector}`)
   }
   const start = source.indexOf('const CSS = `')
@@ -287,7 +289,17 @@ check('the served-controller callbacks keep a stable identity too', () => {
 // namespace, call the endpoint, unwrap the envelope, publish a snapshot) never executed here, and
 // that is exactly where the client half meets the Host. The action's own onClick is the seam: it is
 // what a user clicks.
-let remoteAnswer = () => Promise.resolve({ ok: true, value: { report: 'HOST REPORT' } })
+const EXECUTOR_PATH = 'C:\\Users\\FXS\\AppData\\Local\\Microsoft\\WindowsApps\\pwsh.exe'
+const allowGate = {
+  state: 'allow',
+  version: '7.6.9',
+  path: EXECUTOR_PATH,
+  source: 'shell',
+  origin: 'store-alias',
+  reasonCode: 'ok',
+  at: 1790000000000,
+}
+let remoteAnswer = () => Promise.resolve({ ok: true, value: { report: 'HOST REPORT', gate: allowGate } })
 const remoteCalls = []
 const remoteCtx = {
   ...ctx,
@@ -322,21 +334,51 @@ remoteButton.props.onClick()
 await new Promise((resolve) => setTimeout(resolve, 0))
 const readyTexts = textsOf(remoteSection({ subject: { pkg: 'dsh-win-pwsh7' } }))
 
-check('the Remote flow mounts the namespace, calls the endpoint and renders its report', () => {
+check('the Remote flow mounts the namespace, calls the endpoint and renders the status facts', () => {
   assert.deepEqual(remoteCalls, ['dsh-win-pwsh7', 'status'], `the flow called ${remoteCalls.join(', ')}`)
-  assert.ok(readyTexts.includes('HOST REPORT'),
-    `the report never reached the section: ${readyTexts.join(' | ').slice(0, 200)}`)
+  for (const expected of [
+    dictionaries.zh.status_ready,
+    'PowerShell 7.6.9',
+    EXECUTOR_PATH,
+    dictionaries.zh.status_lead_ready,
+    dictionaries.zh.status_note_store,
+  ]) {
+    assert.ok(readyTexts.includes(expected), `the status card does not render "${expected}": ${readyTexts.join(' | ')}`)
+  }
+  assert.ok(!readyTexts.includes('HOST REPORT'),
+    'the raw model-facing report still leaks into the status card')
+  const facts = elementsOf(remoteSection({ subject: { pkg: 'dsh-win-pwsh7' } }), 'dd')
+  assert.equal(facts.length, 3, `expected three status facts, found ${facts.length}`)
+})
+
+// A client half can briefly run against an older Host half: that Host answers only `report`.
+remoteAnswer = () => Promise.resolve({ ok: true, value: { report: 'LEGACY REPORT' } })
+remoteButton.props.onClick()
+await new Promise((resolve) => setTimeout(resolve, 0))
+const legacyTexts = textsOf(remoteSection({ subject: { pkg: 'dsh-win-pwsh7' } }))
+
+check('an older Host that answers only report still has a usable fallback', () => {
+  assert.ok(legacyTexts.includes('LEGACY REPORT'),
+    `the legacy report never reached the section: ${legacyTexts.join(' | ').slice(0, 200)}`)
 })
 
 // A failure report can carry both the network cause and a pasteable patch. The section has to
 // expose both without making the user copy the prose by hand.
+const deniedGate = {
+  state: 'deny',
+  version: undefined,
+  path: undefined,
+  source: 'rows',
+  reasonCode: 'no-ps7',
+  at: 1790000000000,
+}
 remoteAnswer = () => Promise.resolve({ ok: true, value: { report: [
   'PowerShell 7: not usable — no PowerShell 7 installation was found.',
   '',
   '- id: pwsh-sandbox',
   '  config:',
   "    pwshPath: 'C:\\\\Tools\\\\pwsh.exe'",
-].join('\n') } })
+].join('\n'), gate: deniedGate } })
 remoteButton.props.onClick()
 await new Promise((resolve) => setTimeout(resolve, 0))
 const fixTexts = textsOf(remoteSection({ subject: { pkg: 'dsh-win-pwsh7' } }))
