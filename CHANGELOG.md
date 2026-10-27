@@ -10,6 +10,8 @@
   `ops_bash` case that used to throw an unknown-global-tool warning.
 - Made `dshOpsCompat` opt-in (`false` by default) for 0.2.2. The bridge needs a real multi-session
   boot before it is safe to turn back on by default; the profile keeps its explicit `false`.
+- The configuration page now uses the native `Switch` primitive and native setting-row layout for
+  the coexistence toggle; labels and hints no longer expose raw config keys.
 
 ## 0.2.1 — dsh-ops coexistence bridge
 

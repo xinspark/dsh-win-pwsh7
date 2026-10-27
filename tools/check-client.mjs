@@ -38,6 +38,18 @@ const React = {
   },
 }
 
+/** The native Switch primitive, rendered as the button role the real component uses. */
+function Switch({ checked, onChange, label, disabled }) {
+  return React.createElement('button', {
+    type: 'button',
+    role: 'switch',
+    'aria-checked': checked,
+    'aria-label': label,
+    disabled,
+    onClick: () => onChange(!checked),
+  })
+}
+
 /** Every string rendered anywhere in the tree, in document order. */
 function textsOf(node, found = []) {
   if (typeof node === 'string' || typeof node === 'number') {
@@ -119,6 +131,7 @@ await import('../client.js')
 assert.ok(entry !== undefined, 'client.js did not call window.__ModuleLoader__.load()')
 const client = entry.factory((name) => {
   if (name === 'react') return React
+  if (name === '@deepseek-ai/dsh-client-ui-primitives') return { Switch }
   throw new Error(`the client half required an unexpected module: ${name}`)
 })
 client.apply(ctx)
@@ -149,13 +162,11 @@ check('the card renders its labels from the dictionaries, never as bare config k
     assert.ok(cardTexts.includes(expected), `the card does not render the label "${expected}"`)
   }
 })
-check('each field label also keeps its raw config key, so the form maps to cordis.patch.yml', () => {
-  const labels = elementsOf(cardTree, 'label').map((element) => textsOf(element).join(''))
-  assert.equal(labels.length, 2, `expected two labels, found ${labels.length}`)
-  for (const [index, key] of ['overridePath', 'dshOpsCompat'].entries()) {
-    assert.match(labels[index], new RegExp(key, 'u'), `label ${index} drops the raw key ${key}`)
-    assert.match(labels[index], /[\u4e00-\u9fff]/u, `label ${index} is not localized: ${labels[index]}`)
-  }
+check('the coexist row uses the native Switch primitive, not a custom checkbox', () => {
+  const switches = elementsOf(cardTree, Switch)
+  assert.equal(switches.length, 1, `expected one native switch, found ${switches.length}`)
+  assert.equal(switches[0].props.checked, false)
+  assert.equal(switches[0].props.label, dictionaries.zh.field_dshOpsCompat)
 })
 check('the card renders every hint in Chinese', () => {
   for (const hint of [dictionaries.zh.overridePath_hint, dictionaries.zh.dshOpsCompat_hint]) {

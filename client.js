@@ -12,6 +12,7 @@ window.__ModuleLoader__.load({
   id: 'dsh-win-pwsh7',
   factory(require) {
     const React = require('react')
+    const { Switch } = require('@deepseek-ai/dsh-client-ui-primitives')
     const h = React.createElement
     const { useEffect, useState, useSyncExternalStore } = React
 
@@ -96,10 +97,10 @@ window.__ModuleLoader__.load({
       redetect: 'Re-detect',
       redetecting: 'Detecting…',
       card_title: 'Configuration',
-      field_overridePath: 'Explicit path (overridePath)',
-      overridePath_hint: 'Priority ① explicit pwsh.exe path. Empty = auto-detect. It must spawn and report PowerShell 7 or newer; the Store family alias is accepted, while a version-numbered Store path is never pinned. This only changes what the plugin probes and recommends — it does not wire the pwsh tool. Use the patch in the status section for that.',
-      field_dshOpsCompat: 'Keep native pwsh alongside dsh-ops (dshOpsCompat)',
-      dshOpsCompat_hint: 'Opt-in in 0.2.2 after the 0.2.1 bridge froze the Host. When enabled, pwsh7 enables dsh-ops Compatibility and re-hides the official read/glob/grep and duplicate shell, leaving pwsh + ops_bash. The profile change needs a DSH restart.',
+      field_overridePath: 'PowerShell 7 path',
+      overridePath_hint: 'Optional explicit pwsh.exe path (`overridePath`). Empty = auto-detect. It must spawn and report PowerShell 7 or newer; the Store family alias is accepted, while a version-numbered Store path is never pinned. This only changes what the plugin probes and recommends — it does not wire the pwsh tool. Use the patch in the status section for that.',
+      field_dshOpsCompat: 'Coexist with dsh-ops',
+      dshOpsCompat_hint: 'Experimental. Keeps the native pwsh tool beside ops_bash by enabling dsh-ops Compatibility and hiding its duplicate official tools. Requires a DSH restart.',
       save: 'Save',
       reset: 'Reset',
       saved: 'Saved {at}',
@@ -140,10 +141,10 @@ window.__ModuleLoader__.load({
       redetect: '重新检测',
       redetecting: '检测中…',
       card_title: '配置',
-      field_overridePath: '指定路径（overridePath）',
-      overridePath_hint: '优先级①的显式 pwsh.exe 路径。留空 = 自动探测。必须能启动并报告 PowerShell 7 及以上；Store 家族别名可用，版本号目录永不被 pin。这里只影响插件的探测与推荐，不会给 pwsh 工具接线；接线请用状态区里的补丁。',
-      field_dshOpsCompat: '与 dsh-ops 共存，保留原生 pwsh（dshOpsCompat）',
-      dshOpsCompat_hint: '0.2.2 过渡期默认关闭（0.2.1 的桥接层曾卡死宿主）。开启后会自动启用 dsh-ops 兼容模式，并重新隐藏官方 read/glob/grep 和重复的 shell，只留下 pwsh + ops_bash。profile 变更需要重启 DSH。',
+      field_overridePath: 'PowerShell 7 路径',
+      overridePath_hint: '可选的显式 pwsh.exe 路径（`overridePath`）。留空 = 自动探测。必须能启动并报告 PowerShell 7 及以上；Store 家族别名可用，版本号目录永不被 pin。这里只影响插件的探测与推荐，不会给 pwsh 工具接线；接线请用状态区里的补丁。',
+      field_dshOpsCompat: '与 dsh-ops 共存',
+      dshOpsCompat_hint: '实验性。通过启用 dsh-ops 的 Compatibility 模式并隐藏重复的官方工具，让原生 pwsh 与 ops_bash 并存。需要重启 DSH。',
       save: '保存',
       reset: '重置',
       saved: '已保存 {at}',
@@ -185,8 +186,8 @@ window.__ModuleLoader__.load({
 .dw7-input:focus-visible{outline:none;border-color:var(--dsw-alias-state-business-primary);}
 .dw7-input:disabled{color:var(--dsw-alias-label-tertiary);cursor:default;}
 .dw7-hint{margin:0;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:1.5;}
-.dw7-check-row{display:flex;align-items:center;gap:8px;min-width:0;}
-.dw7-check{width:16px;height:16px;flex:none;margin:0;accent-color:var(--dsw-alias-brand-primary);}
+.dw7-switch-row{display:flex;align-items:flex-start;gap:16px;min-width:0;}
+.dw7-switch-text{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:4px;}
 .dw7-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding-top:4px;}
 .dw7-save{appearance:none;border:1px solid transparent;border-radius:var(--dsw-radius-md);padding:5px 14px;font:inherit;font-size:13px;line-height:1.5;cursor:pointer;background:var(--dsw-alias-label-primary);color:var(--dsw-alias-bg-layer-3);}
 .dw7-save:disabled{opacity:.4;cursor:default;}
@@ -479,20 +480,20 @@ window.__ModuleLoader__.load({
                   }),
                   h('p', { className: 'dw7-hint' }, t('overridePath_hint'))),
                 h('div', { className: 'dw7-field', key: 'dshOpsCompat' },
-                  h('label', { className: 'dw7-check-row' },
-                    h('input', {
-                      className: 'dw7-check',
-                      type: 'checkbox',
+                  h('div', { className: 'dw7-switch-row' },
+                    h('div', { className: 'dw7-switch-text' },
+                      h('div', { className: 'dw7-label' }, t('field_dshOpsCompat')),
+                      h('p', { className: 'dw7-hint' }, t('dshOpsCompat_hint'))),
+                    h(Switch, {
                       checked: values.dshOpsCompat,
                       disabled: !editable,
-                      onChange: (event) => {
-                        setDraft({ ...values, dshOpsCompat: event.target.checked })
+                      label: t('field_dshOpsCompat'),
+                      onChange: (checked) => {
+                        setDraft({ ...values, dshOpsCompat: checked })
                         setNote(null)
                         setSavedAt(null)
                       },
-                    }),
-                    h('span', { className: 'dw7-label' }, t('field_dshOpsCompat'))),
-                  h('p', { className: 'dw7-hint' }, t('dshOpsCompat_hint'))),
+                    }))),
                 h('div', { className: 'dw7-actions', key: 'actions' },
                   h('button', {
                     className: 'dw7-save',
