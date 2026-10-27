@@ -535,23 +535,24 @@ class Pwsh7Dispatch extends Service {
 async function activationSweep(ctx, config) {
   const status = await detect(ctx, config)
   if (config?.installIfMissing === true && status.chosen === undefined) {
-    // The connection cost is read here too, and for the same reason as in `runInstall`: on a
-    // metered connection that single setting is the whole explanation. The install itself is given
-    // a short grace rather than being awaited — see ACTIVATION_INSTALL_GRACE_MS.
-    const metered = await meteredWarning(ctx)
-    const detail = (extra) => [metered, extra].filter((part) => part !== undefined).join(' ')
+    const pre = await preflightInstall(ctx)
+    if (!pre.ok) {
+      const detail = installBlockedDetail(pre)
+      ctx.logger?.warn?.('dsh-win-pwsh7: installIfMissing is enabled but the preflight refused the install: %s', detail)
+      return renderStatus(ctx, config, { installAttempt: { ok: false, detail } })
+    }
     ctx.logger?.info?.('dsh-win-pwsh7: installIfMissing is enabled and no ordinary PowerShell 7 exists — starting the Microsoft Store install')
     const result = await installViaWinget(ctx, ACTIVATION_INSTALL_GRACE_MS)
     if (result.pending === true) {
-      ctx.logger?.warn?.('dsh-win-pwsh7: %s', detail(result.detail))
-      return renderStatus(ctx, config, { installAttempt: { ok: false, detail: detail(result.detail) } })
+      ctx.logger?.warn?.('dsh-win-pwsh7: %s', result.detail)
+      return renderStatus(ctx, config, { installAttempt: { ok: false, detail: result.detail } })
     }
     // The exit code is evidence, not a verdict: the Store can finish after winget has exited,
     // so the sweep re-probes for a bounded while exactly as the background job does.
     const after = await awaitRuntime(ctx, config)
     const installAttempt = after.chosen === undefined
-      ? { ok: false, detail: detail(`${result.detail}; no usable PowerShell 7 appeared after re-probing`) }
-      : { ok: true, detail: detail(result.detail) }
+      ? { ok: false, detail: `${result.detail}; no usable PowerShell 7 appeared after re-probing` }
+      : { ok: true, detail: result.detail }
     return renderStatus(ctx, config, { installAttempt })
   }
   return renderStatus(ctx, config, { status })
@@ -624,24 +625,29 @@ function gateFromReading(reading, rows, status) {
   const path = reading?.path
   const source = reading?.source ?? 'rows'
   const at = Date.now()
+  const candidate = [status?.override, status?.auto].find((value) => value?.usable === true && inPlace(value.origin))
+  const recommended = candidate === undefined
+    ? undefined
+    : { path: candidate.path, version: candidate.version, origin: candidate.origin }
+  const base = { version, path, source, at, recommended }
 
   if (version !== undefined && (majorOf(version) ?? 0) >= MINIMUM_MAJOR) {
-    return { state: 'allow', version, path, source, reasonCode: 'ok', at }
+    return { ...base, state: 'allow', reasonCode: 'ok' }
   }
   if (version !== undefined) {
-    return { state: 'deny', version, path, source, reasonCode: 'windows-powershell', at }
+    return { ...base, state: 'deny', reasonCode: 'windows-powershell' }
   }
   if (path !== undefined && !isSpawnable(path)) {
-    return { state: 'deny', version: undefined, path, source, reasonCode: 'broken-pin', at }
+    return { ...base, state: 'deny', version: undefined, reasonCode: 'broken-pin' }
   }
   if (path !== undefined) {
-    return { state: 'deny', version: undefined, path, source, reasonCode: 'unknown', at }
+    return { ...base, state: 'deny', version: undefined, reasonCode: 'unknown' }
   }
   const broken = rows.find((row) => row.pwshPath !== undefined && !isSpawnable(row.pwshPath))
   if (broken !== undefined) {
-    return { state: 'deny', version: undefined, path: broken.pwshPath, source: 'rows', reasonCode: 'broken-pin', at }
+    return { ...base, state: 'deny', version: undefined, path: broken.pwshPath, source: 'rows', reasonCode: 'broken-pin' }
   }
-  return { state: 'deny', version: undefined, path: undefined, source, reasonCode: 'no-ps7', at }
+  return { ...base, state: 'deny', version: undefined, path: undefined, reasonCode: 'no-ps7' }
 }
 
 /**
@@ -684,8 +690,13 @@ function denialText(reading) {
   const at = reading.path === undefined ? '' : ` (${reading.path})`
   const options = 'Do not retry. Tell the user PowerShell 7 must be installed or configured: call pwsh7_status for the exact profile patch, call pwsh7_install only after the user agrees, or disable dsh-win-pwsh7.'
   switch (reading.reasonCode) {
-    case 'windows-powershell':
-      return `dsh-win-pwsh7 blocked this call: the pwsh tool would run Windows PowerShell ${reading.version}${at}. ${options}`
+    case 'windows-powershell': {
+      const available = reading.recommended
+      const state = available === undefined
+        ? `the pwsh tool would run Windows PowerShell ${reading.version}${at}`
+        : `PowerShell ${available.version} is available at ${available.path}, but the executor would run Windows PowerShell ${reading.version}${at}`
+      return `dsh-win-pwsh7 blocked this call: ${state}. ${options}`
+    }
     case 'broken-pin':
       return `dsh-win-pwsh7 blocked this call: the pwsh tool cannot start — the executor pins ${reading.path}, which does not exist. Do not retry. Tell the user to replace or remove that pwshPath (pwsh7_status prints the patch), install PowerShell 7, or disable this plugin.`
     case 'no-ps7':
@@ -799,12 +810,32 @@ async function renderStatus(ctx, config, options = {}) {
       lines.push('the pwsh tool picks it up natively. Nothing to configure.')
       return lines.join('\n')
     }
-    lines.push(`To make the pwsh tool use PowerShell ${target.version} (${target.path}), add this to the profile patch`)
+    const sourceRow = rows.find((row) => row.id === SOURCE_ROW_ID)
+    const currentConfig = sourceRow?.config ?? {}
+    const patchConfig = { ...currentConfig, pwshPath: target.path }
+    const action = sourceRow === undefined ? 'add' : 'update'
+    lines.push(`To make the pwsh tool use PowerShell ${target.version} (${target.path}), ${action} this in the profile patch`)
     lines.push('(~/.dsh/profiles/<profile>/cordis.patch.yml) and restart DSH:')
     lines.push('')
     lines.push(`- id: ${SOURCE_ROW_ID}`)
     lines.push('  config:')
-    lines.push(`    pwshPath: '${target.path}'`)
+    for (const [key, value] of Object.entries(patchConfig)) {
+      if (value === undefined) continue
+      lines.push(`    ${key}: ${key === 'pwshPath' ? `'${value}'` : JSON.stringify(value)}`)
+    }
+    if (Object.keys(currentConfig).some((key) => key !== 'pwshPath')) {
+      lines.push('')
+      lines.push('The `config` block replaces that row\'s config wholesale; the fields above are the ones')
+      lines.push('the row currently carries, plus pwshPath.')
+    } else if (sourceRow !== undefined) {
+      lines.push('')
+      lines.push('The `config` block replaces that row\'s config wholesale; keep any other fields it has.')
+    }
+    if (status.override?.usable === true && target === status.override) {
+      lines.push('')
+      lines.push('overridePath is only what this plugin probes and recommends; the pwsh tool does not read it.')
+      lines.push('The patch above is what wires the executor.')
+    }
     if (target.origin === 'store-alias') {
       lines.push('')
       lines.push('That path is the version-stable Store family alias — pinning it is what keeps Store updates')
@@ -836,6 +867,78 @@ async function renderStatus(ctx, config, options = {}) {
 }
 
 /**
+ * Resolve the `winget.exe` the install uses. The environment override exists for the gates: they
+ * must not depend on the author's PATH, and a missing override entry is how the no-winget branch is
+ * exercised without touching the machine.
+ * @returns the resolved command, or `undefined`.
+ */
+function resolveWinget() {
+  const override = process.env.DSH_WIN_PWSH7_WINGET
+  if (override !== undefined) return override.length === 0 ? undefined : override
+  return resolveOnPath('winget.exe')
+}
+
+/**
+ * The install preflight: winget must exist, a connection profile must be readable, and the
+ * connection must not be metered. `Unknown` and an unreadable cost are refused as well — the
+ * measured failure mode is a Store download that waits forever with no error, so "cannot tell" is
+ * not permission to start.
+ * @param ctx - the row's Host context.
+ * @returns `{ ok: true, winget, reading }` or `{ ok: false, code, reading? }`.
+ */
+async function preflightInstall(ctx) {
+  const winget = resolveWinget()
+  if (winget === undefined) return { ok: false, code: 'no-winget' }
+  const reading = await networkCost(ctx)
+  if (reading === undefined) return { ok: false, code: 'network-unknown' }
+  if (METERED_COST.has(reading.cost)) return { ok: false, code: 'metered', reading }
+  if (reading.cost === 'Unknown' || reading.profile === '') return { ok: false, code: 'network-unknown', reading }
+  return { ok: true, winget, reading }
+}
+
+/** One line for the activation log and the report's `installAttempt.detail`. */
+function installBlockedDetail(pre) {
+  if (pre.code === 'no-winget') return 'winget was not found on PATH'
+  if (pre.code === 'metered') return `the ${pre.reading?.profile === undefined || pre.reading.profile === '' ? 'active' : `"${pre.reading.profile}"`} connection is marked as metered`
+  return 'the connection cost could not be determined'
+}
+
+/**
+ * The user-facing report when the preflight refuses to start. It names the exact setting and the
+ * verification step; it never offers another installer, because the metered connection is a
+ * connection setting, not a reason to leave the Store.
+ * @param pre - the failed preflight.
+ * @returns the report text.
+ */
+function installBlockedReport(pre) {
+  if (pre.code === 'no-winget') {
+    return [
+      'Install not started: winget was not found on PATH. Install "App Installer" from the Microsoft',
+      `Store, or run it yourself after installing it: ${STORE_COMMAND}`,
+    ].join(' ')
+  }
+  if (pre.code === 'metered') {
+    const named = pre.reading.profile.length === 0 ? 'This connection' : `The "${pre.reading.profile}" connection`
+    return [
+      `Install not started: ${named} is marked as metered ("Metered connection"), and Windows defers`,
+      'Microsoft Store downloads on metered connections: the install would sit queued with no error.',
+      'Fix: Settings → Network & Internet → Wi-Fi → that network → turn off "Metered connection"',
+      '(for Ethernet: Settings → Network & Internet → Ethernet → that network → the same switch).',
+      'Then run pwsh7_install again; it re-checks and starts only after the connection reports Unrestricted.',
+      'To verify the reading, run pwsh7_status; the metered warning disappears when the setting is off.',
+      `If the probe keeps failing, run it manually: ${STORE_COMMAND}`,
+      'Do not switch to another installer — the Store package is the only path this plugin supports.',
+    ].join(' ')
+  }
+  return [
+    'Install not started: the connection cost could not be determined (the Windows PowerShell 5.1',
+    'probe failed or returned Unknown). Check that the machine is online and that the active network\'s',
+    '"Metered connection" switch is off, then retry. If the probe keeps failing, run it manually:',
+    STORE_COMMAND,
+  ].join(' ')
+}
+
+/**
  * Run `pwsh7_install`: skip when an acceptable PowerShell 7 is already in place (an ordinary
  * file or the Store family alias). Otherwise start the install as a **background job** and return
  * at once, so an install that needs many minutes is visible, cancellable, and readable through the
@@ -852,22 +955,20 @@ async function runInstall(ctx, config, exec) {
     return `PowerShell ${before.chosen.version} is already in place (${before.chosen.path}, ${labelOf(before.chosen)}); nothing to install.`
   }
 
-  const metered = await meteredWarning(ctx)
-  const warning = metered === undefined ? [] : [metered, '']
+  const pre = await preflightInstall(ctx)
+  if (!pre.ok) return installBlockedReport(pre)
 
   const jobs = ctx.get('jobs')
   if (jobs === undefined || typeof jobs.start !== 'function') {
     const result = await installViaWinget(ctx, INLINE_INSTALL_GRACE_MS)
     if (result.pending === true) {
       return [
-        ...warning,
         'No background-job registry is composed here, so the install ran inline and could not report progress.',
         result.detail,
       ].join('\n')
     }
     const after = await awaitRuntime(ctx, config)
     return [
-      ...warning,
       'No background-job registry is composed here, so the install ran inline and could not report progress.',
       ...await installVerdict(ctx, config, result, after),
     ].join('\n')
@@ -880,18 +981,16 @@ async function runInstall(ctx, config, exec) {
     const result = await installViaWinget(ctx, INLINE_INSTALL_GRACE_MS)
     const after = await awaitRuntime(ctx, config)
     return [
-      ...warning,
       `The job registry refused to start the install (${describe(error)}), so it ran inline.`,
       ...await installVerdict(ctx, config, result, after),
     ].join('\n')
   }
 
   return [
-    ...warning,
     `Installing PowerShell 7 from the Microsoft Store in the background as job ${id}.`,
     'Read its progress and output with job_output; stop it with job_kill. The Store downloads only',
-    'when Windows lets it: a metered connection defers it (the probe above says whether this one is),',
-    'and winget may exit non-zero while the Store still finishes the work.',
+    'when Windows lets it: the preflight above confirmed the active connection is not metered, and',
+    'winget may exit non-zero while the Store still finishes the work.',
     'The plugin re-checks the runtime after winget exits and again when the job settles, so a late',
     'finish is still reported as installed. pwsh7_status shows the current reading at any time.',
   ].join('\n')
@@ -1363,7 +1462,7 @@ async function probeVersion(ctx, executable) {
  * @returns the live subprocess handle.
  */
 function spawnWingetProcess(ctx) {
-  const winget = resolveOnPath('winget.exe')
+  const winget = resolveWinget()
   if (winget === undefined) {
     throw new Error(`winget was not found on PATH; install PowerShell 7 manually: ${STORE_COMMAND}`)
   }
@@ -1540,14 +1639,14 @@ async function executorRows(ctx) {
     // row the report names as the runtime (and it is why `effectiveRuntime` filters on this).
     const disabled = entry.disabled === true || entry.options?.disabled === true
     if (!isSet(declared)) {
-      rows.push({ id, disabled, pwshPath: undefined, text: `${id} : (pwshPath not set — the executor probes well-known locations itself)` })
+      rows.push({ id, disabled, pwshPath: undefined, config: entry.options?.config ?? {}, text: `${id} : (pwshPath not set — the executor probes well-known locations itself)` })
       continue
     }
     const pwshPath = String(declared)
     const check = await validateRowPath(ctx, pwshPath)
     rows.push(check.usable
-      ? { id, disabled, pwshPath, version: check.version, probed: check.version, origin: check.origin, text: `${id} : pwshPath = ${pwshPath} (PowerShell ${check.version}, ${labelOf(check)})` }
-      : { id, disabled, pwshPath, probed: check.version, text: `${id} : pwshPath = ${pwshPath} (not a usable PowerShell 7: ${check.reason})` })
+      ? { id, disabled, pwshPath, config: entry.options?.config ?? {}, version: check.version, probed: check.version, origin: check.origin, text: `${id} : pwshPath = ${pwshPath} (PowerShell ${check.version}, ${labelOf(check)})` }
+      : { id, disabled, pwshPath, config: entry.options?.config ?? {}, probed: check.version, text: `${id} : pwshPath = ${pwshPath} (not a usable PowerShell 7: ${check.reason})` })
   }
   return rows
 }

@@ -41,6 +41,9 @@ register('./node-app-modules-hook.mjs', import.meta.url)
 // Small but non-zero: the re-probe must be slow enough that a cancel can land *during* the loop.
 process.env.DSH_WIN_PWSH7_RECHECK_MS = '5'
 process.env.DSH_WIN_PWSH7_TICK_MS = '5'
+// The install preflight resolves winget through this override, so the gate never depends on the
+// author's PATH. The no-winget case clears it for one assertion.
+process.env.DSH_WIN_PWSH7_WINGET = 'winget.exe'
 // The inline install graces, so the "still running" paths are reachable without a real wait.
 process.env.DSH_WIN_PWSH7_ACTIVATION_GRACE_MS = '50'
 process.env.DSH_WIN_PWSH7_INLINE_GRACE_MS = '200'
@@ -76,7 +79,7 @@ function makeStoreFixtures() {
  * which is what lets the gate prove the install tool returns *before* winget exits.
  * `jobs: false` omits the job registry entirely, to exercise the inline fallback.
  */
-function makeContext({ rows = [], versions = {}, deferred = false, jobs = false, shellPath } = {}) {
+function makeContext({ rows = [], versions = {}, deferred = false, jobs = false, shellPath, network = 'Unrestricted|FixtureNet' } = {}) {
   const registered = new Map()
   const spawned = []
   const terminated = []
@@ -144,12 +147,22 @@ function makeContext({ rows = [], versions = {}, deferred = false, jobs = false,
       spawn({ argv }) {
         spawned.push(argv[0])
         const isWinget = /winget/iu.test(argv[0])
+        const isNetworkProbe = /WindowsPowerShell[\\/]v1\.0[\\/]powershell\.exe$/iu.test(argv[0])
         const version = isWinget ? undefined : versions[argv[0]]
         let exitCode = 0
         let stdout = ''
         if (isWinget) {
           exitCode = state.wingetExit
           stdout = 'Started MSStore package execution. ProductId: 9MZ1SNWT0N5D\r\n'
+        } else if (isNetworkProbe && version === undefined) {
+          // The install preflight reads the same WinRT cost the Store does. Default to an
+          // unrestricted fixture; a test that needs a metered/unreadable cost sets `network`
+          // (or `versions[fiftyOne]`) explicitly.
+          if (network === null) {
+            exitCode = 1
+          } else {
+            stdout = `${network}\r\n`
+          }
         } else if (version === undefined) {
           exitCode = 1
         } else {
@@ -254,6 +267,31 @@ for (const tool of machine.registered.values()) {
 check('the install tool refuses to install over a usable PowerShell 7', () => {
   assert.ok(!machine.spawned.some((executable) => /winget/iu.test(executable)),
     `winget was spawned: ${machine.spawned.join(', ')}`)
+})
+
+const overrideReport = (await machine.registered.get('pwsh7_status').execute({}, undefined)).report
+check('config guidance: overridePath is explicitly not executor wiring', () => {
+  assert.match(overrideReport, /overridePath is only what this plugin probes/u)
+  assert.match(overrideReport, /pwshPath: 'C:\\Windows\\System32\\cmd\.exe'/u)
+})
+
+const replaceMachine = makeContext({
+  rows: [{
+    options: {
+      id: 'pwsh-sandbox',
+      name: '@deepseek-ai/dsh-pwsh-sandbox',
+      config: { pwshPath: POWERSHELL_51, timeoutMs: 1234 },
+    },
+  }],
+  versions: { [POWERSHELL_51]: '5.1.26100', [ORDINARY]: '7.6.6' },
+})
+apply(replaceMachine.ctx, { overridePath: ORDINARY })
+const replaceReport = (await replaceMachine.registered.get('pwsh7_status').execute({}, undefined)).report
+check('config guidance: an existing row is updated, and config replaces wholesale', () => {
+  assert.match(replaceReport, /update this in the profile patch/u)
+  assert.match(replaceReport, /timeoutMs: 1234/u)
+  assert.match(replaceReport, /pwshPath: 'C:\\Windows\\System32\\cmd\.exe'/u)
+  assert.match(replaceReport, /replaces that row's config wholesale/u)
 })
 
 // --- The executor's own path is authoritative -------------------------------------------
@@ -592,6 +630,35 @@ if (existsSync(MSI)) {
   const clearMachine = makeContext({ rows: [executorRow(undefined)], versions: {}, deferred: true, jobs: true })
   apply(clearMachine.ctx, {})
   const clearReport = (await clearMachine.registered.get('pwsh7_install').execute({}, undefined)).report
+
+  const unknownMachine = makeContext({ rows: [executorRow(undefined)], versions: {}, network: null, deferred: true, jobs: true })
+  apply(unknownMachine.ctx, {})
+  const unknownReport = (await unknownMachine.registered.get('pwsh7_install').execute({}, undefined)).report
+
+  const savedWinget = process.env.DSH_WIN_PWSH7_WINGET
+  process.env.DSH_WIN_PWSH7_WINGET = ''
+  const noWingetMachine = makeContext({ rows: [executorRow(undefined)], versions: {}, deferred: true, jobs: true })
+  apply(noWingetMachine.ctx, {})
+  const noWingetReport = (await noWingetMachine.registered.get('pwsh7_install').execute({}, undefined)).report
+  process.env.DSH_WIN_PWSH7_WINGET = savedWinget
+
+  check('install preflight: an unrestricted connection starts the job', () => {
+    assert.equal(clearMachine.jobSpecs.length, 1)
+    assert.ok(!/not started/iu.test(clearReport), `the report blocked a usable connection: ${clearReport.slice(0, 240)}`)
+  })
+  check('install preflight: a metered connection starts no job and names the fix', () => {
+    assert.equal(meteredMachine.jobSpecs.length, 0)
+    assert.match(meteredReport, /Install not started/u)
+  })
+  check('install preflight: an unreadable cost is refused, not guessed', () => {
+    assert.equal(unknownMachine.jobSpecs.length, 0)
+    assert.match(unknownReport, /could not be determined/u)
+  })
+  check('install preflight: a missing winget is refused with the manual path', () => {
+    assert.equal(noWingetMachine.jobSpecs.length, 0)
+    assert.match(noWingetReport, /winget was not found/u)
+    assert.match(noWingetReport, /winget install/u)
+  })
   // The status report carries the same warning, but only when there is nothing to run: that is the
   // state a fresh session lands in after the runtime is uninstalled. The negative case is proved by
   // the spawn log rather than by wording: with a usable runtime the probe must not run at all, even
