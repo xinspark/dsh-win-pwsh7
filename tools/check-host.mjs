@@ -84,6 +84,8 @@ function makeContext({ rows = [], versions = {}, deferred = false, jobs = false,
   const orderNames = []
   const jobSpecs = []
   const pending = []
+  const guards = []
+  const listeners = new Map()
   /** Mutable so a test can make winget exit non-zero, as the Store route does. */
   const state = { wingetExit: 0 }
   const ctx = {
@@ -113,6 +115,19 @@ function makeContext({ rows = [], versions = {}, deferred = false, jobs = false,
         registered.set(definition.name, definition)
         return () => registered.delete(definition.name)
       },
+      guard(guard) {
+        guards.push(guard)
+        return () => {
+          const index = guards.indexOf(guard)
+          if (index >= 0) guards.splice(index, 1)
+        }
+      },
+    },
+    on(event, listener) {
+      const set = listeners.get(event) ?? new Set()
+      set.add(listener)
+      listeners.set(event, set)
+      return () => set.delete(listener)
     },
     systemPrompt: {
       section(section) {
@@ -166,7 +181,7 @@ function makeContext({ rows = [], versions = {}, deferred = false, jobs = false,
       return `pwsh7-${jobSpecs.length}`
     },
   }
-  return { ctx, registered, spawned, terminated, sections, orderNames, jobSpecs, state, settleAll: () => { for (const entry of pending.splice(0)) entry.settle() } }
+  return { ctx, registered, spawned, terminated, sections, orderNames, jobSpecs, state, guards, listeners, settleAll: () => { for (const entry of pending.splice(0)) entry.settle() } }
 }
 
 /** Let every microtask chain the activation sweep started settle, so the shared note is stable. */
@@ -341,6 +356,29 @@ check('prompt section: a pin that no longer exists says the tool cannot start, w
   assert.match(brokenPin.text, /disable this plugin/u)
   assert.ok(!/`&&`/u.test(brokenPin.text),
     'a runtime that cannot start must not claim the operators work')
+})
+
+// --- The gate: a call-time denial, not a hidden tool ------------------------------------
+
+check('gate: a PowerShell 7 reading allows a pwsh call', () => {
+  assert.equal(stable.machine.guards[0]?.({ name: 'pwsh' }), undefined)
+})
+check('gate: Windows PowerShell 5.1 denies with report/install/config guidance', () => {
+  const reason = fiveOne.machine.guards[0]?.({ name: 'pwsh' })
+  assert.match(reason, /blocked/u)
+  assert.match(reason, /Do not retry/u)
+  assert.match(reason, /pwsh7_status/u)
+  assert.match(reason, /pwsh7_install/u)
+  assert.match(reason, /disable dsh-win-pwsh7/u)
+})
+check('gate: a broken pin denies as cannot-start, naming the path', () => {
+  const reason = brokenPin.machine.guards[0]?.({ name: 'pwsh' })
+  assert.match(reason, /cannot start/u)
+  assert.match(reason, /C:\\no\\such\\directory\\pwsh\.exe/u)
+})
+check('gate: the plugin’s own recovery tools are never denied', () => {
+  assert.equal(fiveOne.machine.guards[0]?.({ name: 'pwsh7_status' }), undefined)
+  assert.equal(fiveOne.machine.guards[0]?.({ name: 'pwsh7_install' }), undefined)
 })
 
 // This whole half of the gate runs against fixtures on **any** machine: `PATH`, `LOCALAPPDATA`

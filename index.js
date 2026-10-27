@@ -173,6 +173,14 @@ const RECHECK_DELAY_MS = envMs('DSH_WIN_PWSH7_RECHECK_MS', 15000)
 const ACTIVATION_INSTALL_GRACE_MS = envMs('DSH_WIN_PWSH7_ACTIVATION_GRACE_MS', 15 * 1000)
 const INLINE_INSTALL_GRACE_MS = envMs('DSH_WIN_PWSH7_INLINE_GRACE_MS', 120 * 1000)
 
+/**
+ * How long a gate reading is trusted before the next `pwsh` call refreshes it. A gate that is
+ * merely stale may deny a machine whose runtime was just installed outside the plugin; waiting for a
+ * status call is how the 0.12.3 prompt section behaved, and that is exactly the gap this closes.
+ * The environment override keeps the gate fast in tests.
+ */
+const GATE_TTL_MS = envMs('DSH_WIN_PWSH7_GATE_TTL_MS', 60 * 1000)
+
 /** The profile patch id whose config Desktop's generator copies into the live row. */
 const SOURCE_ROW_ID = 'pwsh-sandbox'
 
@@ -259,7 +267,38 @@ const HINT_SECTION = 'tool:pwsh-runtime'
  * would share this state and the newest one wins; moving it into the apply scope is the fix if that
  * ever becomes a real deployment. Recorded as backlog rather than refactored blind before a release.
  */
-let runtimeNote = ''
+/**
+ * Per-application runtime state, keyed by the Host context. The gate used to be module-level,
+ * which was only true while one row existed in one process; the host gate applies several
+ * fixtures in one process, and a second row or a hot reload has the same shape. Keeping the
+ * reading beside the context is the smallest fix that makes the guard read its own application.
+ */
+const runtimeStates = new WeakMap()
+
+/**
+ * The runtime state for one row, created on first use.
+ * @param ctx - the row's Host context.
+ * @returns its gate snapshot and prompt note.
+ */
+function runtimeState(ctx) {
+  let state = runtimeStates.get(ctx)
+  if (state === undefined) {
+    state = {
+      gate: {
+        state: 'unknown',
+        version: undefined,
+        path: undefined,
+        source: 'unknown',
+        reasonCode: 'detecting',
+        at: 0,
+      },
+      runtimeNote: '',
+      refreshing: null,
+    }
+    runtimeStates.set(ctx, state)
+  }
+  return state
+}
 
 /**
  * The output contract both tools share: the report is the whole payload, so the registry's
@@ -294,6 +333,7 @@ export function apply(ctx, config) {
   // volatile write through configForms) take effect without a restart.
   const current = () => readRowConfig(ctx, config)
   hostContext = ctx
+  const state = runtimeState(ctx)
 
   ctx.effect(() => {
     void activationSweep(ctx, current()).then((report) => {
@@ -309,7 +349,7 @@ export function apply(ctx, config) {
         name: HINT_SECTION,
         // Beside the shipped `tool:pwsh` note, from the centrally owned placement table.
         order: ctx.systemPrompt.getSectionOrder('TOOL_PWSH'),
-        text: () => runtimeNote,
+        text: () => state.runtimeNote,
       })
     } catch (error) {
       ctx.logger?.warn?.('dsh-win-pwsh7: could not register the prompt section: %s', describe(error))
@@ -378,6 +418,52 @@ export function apply(ctx, config) {
       for (const cleanup of cleanups) cleanup?.()
     }
   }, 'dsh-win-pwsh7: pwsh7_status and pwsh7_install tools')
+
+  // The gate is a global, synchronous guard: it sees every agent's `pwsh` call, including a
+  // subagent's, and denies before the executor can spawn anything. `pwsh7_status` and
+  // `pwsh7_install` are deliberately untouched — they are the recovery path.
+  ctx.effect(() => {
+    if (typeof ctx.tools.guard !== 'function') {
+      ctx.logger?.warn?.('dsh-win-pwsh7: tools.guard is unavailable; pwsh calls will not be gated')
+      return
+    }
+    return ctx.tools.guard((exec) => {
+      if (exec.name !== 'pwsh') return
+      if (state.gate.state === 'allow') return
+      return denialText(state.gate)
+    })
+  }, 'dsh-win-pwsh7: gate pwsh until PowerShell 7 is effective')
+
+  // Guards are synchronous; the pre-execute waterfall is the asynchronous half. It runs before the
+  // guard, so a stale reading is refreshed *before* the guard reads it. Always `next()`: the guard
+  // is the denial owner, not this listener.
+  ctx.effect(() => {
+    if (typeof ctx.on !== 'function') return
+    return ctx.on('tools/pre-execute', async (exec, next) => {
+      if (exec.name !== 'pwsh') return next()
+      try {
+        if (state.gate.state === 'unknown' || Date.now() - state.gate.at > GATE_TTL_MS) {
+          await refreshGate(ctx, current())
+        }
+      } catch {
+        /* keep the last gate: fail closed */
+      }
+      return next()
+    })
+  }, 'dsh-win-pwsh7: refresh the gate before a pwsh call')
+
+  // A config-card save or a profile patch edit re-composes the Loader; re-read the executor after
+  // it settles so the gate follows without waiting for the TTL.
+  ctx.effect(() => {
+    if (typeof ctx.on !== 'function') return
+    const disposers = [
+      ctx.on('app-boot/config-reload', () => { void refreshGate(ctx, current()) }),
+      ctx.on('plugin-manager/changed', () => { void refreshGate(ctx, current()) }),
+    ]
+    return () => {
+      for (const dispose of disposers) dispose?.()
+    }
+  }, 'dsh-win-pwsh7: refresh the gate after a profile change')
 
   try {
     ctx.plugin(Pwsh7Dispatch)
@@ -516,6 +602,101 @@ async function shellRuntimeReading(ctx) {
   return { path, version, origin: originOf(path), source }
 }
 
+/** The major version of a probed string, or `undefined` when it is not a version. */
+function majorOf(version) {
+  if (version === undefined) return undefined
+  const major = Number.parseInt(version.split('.')[0] ?? '', 10)
+  return Number.isSafeInteger(major) ? major : undefined
+}
+
+/**
+ * Turn one reading into the gate snapshot. The executor reading wins when present; the row-based
+ * reading is the fallback for compositions without a shell service (and for the existing gate
+ * fixtures). A path that exists but reports no version is unknown, not a 5.1 verdict; a pinned path
+ * that does not exist is named as such so the report can say "replace or remove it".
+ * @param reading - `shellRuntimeReading()`'s result, or `undefined` without a shell.
+ * @param rows - the probed executor rows, for the fallback.
+ * @param status - the detection result, for the fallback.
+ * @returns the gate snapshot.
+ */
+function gateFromReading(reading, rows, status) {
+  const version = reading?.version ?? effectiveRuntime(rows, status)
+  const path = reading?.path
+  const source = reading?.source ?? 'rows'
+  const at = Date.now()
+
+  if (version !== undefined && (majorOf(version) ?? 0) >= MINIMUM_MAJOR) {
+    return { state: 'allow', version, path, source, reasonCode: 'ok', at }
+  }
+  if (version !== undefined) {
+    return { state: 'deny', version, path, source, reasonCode: 'windows-powershell', at }
+  }
+  if (path !== undefined && !isSpawnable(path)) {
+    return { state: 'deny', version: undefined, path, source, reasonCode: 'broken-pin', at }
+  }
+  if (path !== undefined) {
+    return { state: 'deny', version: undefined, path, source, reasonCode: 'unknown', at }
+  }
+  const broken = rows.find((row) => row.pwshPath !== undefined && !isSpawnable(row.pwshPath))
+  if (broken !== undefined) {
+    return { state: 'deny', version: undefined, path: broken.pwshPath, source: 'rows', reasonCode: 'broken-pin', at }
+  }
+  return { state: 'deny', version: undefined, path: undefined, source, reasonCode: 'no-ps7', at }
+}
+
+/**
+ * Refresh the gate from the executor (or the row fallback), one probe set at a time. This is the
+ * only writer besides `renderStatus`, which sets the same snapshot from its own reading.
+ * @param ctx - the row's Host context.
+ * @param config - the live row configuration.
+ * @returns the fresh gate snapshot.
+ */
+async function refreshGate(ctx, config) {
+  const state = runtimeState(ctx)
+  if (state.refreshing !== null) return state.refreshing
+  state.refreshing = (async () => {
+    try {
+      const status = await detect(ctx, config)
+      const rows = await executorRows(ctx)
+      const reading = await shellRuntimeReading(ctx)
+      state.gate = gateFromReading(reading, rows, status)
+      state.runtimeNote = state.gate.version !== undefined ? hintFor(state.gate.version) : runtimeNoteFor(rows, status)
+      return state.gate
+    } catch (error) {
+      state.gate = { state: 'deny', version: undefined, path: undefined, source: 'error', reasonCode: 'unknown', at: Date.now(), detail: describe(error) }
+      ctx.logger?.warn?.('dsh-win-pwsh7: gate refresh failed: %s', describe(error))
+      return state.gate
+    } finally {
+      state.refreshing = null
+    }
+  })()
+  return state.refreshing
+}
+
+/**
+ * The model-facing reason a `pwsh` call is denied. It is deliberately self-contained: the model
+ * must be able to report the state and the three choices without first calling another tool, while
+ * `pwsh7_status` remains the place for the exact patch.
+ * @param reading - the gate snapshot.
+ * @returns the denial reason (the registry wraps it as `Error: <reason>`).
+ */
+function denialText(reading) {
+  const at = reading.path === undefined ? '' : ` (${reading.path})`
+  const options = 'Do not retry. Tell the user PowerShell 7 must be installed or configured: call pwsh7_status for the exact profile patch, call pwsh7_install only after the user agrees, or disable dsh-win-pwsh7.'
+  switch (reading.reasonCode) {
+    case 'windows-powershell':
+      return `dsh-win-pwsh7 blocked this call: the pwsh tool would run Windows PowerShell ${reading.version}${at}. ${options}`
+    case 'broken-pin':
+      return `dsh-win-pwsh7 blocked this call: the pwsh tool cannot start — the executor pins ${reading.path}, which does not exist. Do not retry. Tell the user to replace or remove that pwshPath (pwsh7_status prints the patch), install PowerShell 7, or disable this plugin.`
+    case 'no-ps7':
+      return `dsh-win-pwsh7 blocked this call: no PowerShell 7 is installed or detectable, so the pwsh tool would fall back to Windows PowerShell 5.1. ${options}`
+    case 'detecting':
+      return 'dsh-win-pwsh7 is still detecting the PowerShell runtime; the call was not executed. Do not retry; call pwsh7_status, then try again.'
+    default:
+      return `dsh-win-pwsh7 blocked this call: the PowerShell runtime could not be determined${at}. Do not retry; call pwsh7_status to re-detect, then install PowerShell 7, fix the pinned path, or disable this plugin.`
+  }
+}
+
 /**
  * Build the human-readable report: the requested path check (when asked), the configured
  * override, what the executor rows run today, and the recommendation — a patch for an
@@ -534,8 +715,10 @@ async function renderStatus(ctx, config, options = {}) {
   const shellReading = await shellRuntimeReading(ctx)
 
   // Every caller of this function (activation sweep, both tools, the page's Re-detect)
-  // refreshes the prompt section from the same reading as the report.
-  runtimeNote = shellReading?.version !== undefined
+  // refreshes the prompt section and the gate from the same reading as the report.
+  const state = runtimeState(ctx)
+  state.gate = gateFromReading(shellReading, rows, status)
+  state.runtimeNote = shellReading?.version !== undefined
     ? hintFor(shellReading.version)
     : runtimeNoteFor(rows, status)
 
@@ -821,6 +1004,10 @@ function installJobSpec(ctx, config, exec) {
             // probe stops that loop too — `job_kill` during the re-probe used to be ignored.
             const after = await awaitRuntime(ctx, config, job, () => cancelled)
             const verdict = await installVerdict(ctx, config, result, after)
+            // Do not probe here: the next `pwsh` call (or the status page) refreshes through
+            // pre-execute. Invalidating the timestamp is enough to make that refresh happen, and
+            // it keeps a settling install from adding probes to an unrelated gate.
+            runtimeState(ctx).gate.at = 0
             job.append(`\n${verdict.join('\n')}\n`)
             return {
               status: after.chosen === undefined ? 'failed' : 'completed',
@@ -1465,7 +1652,7 @@ function hintFor(version) {
   const major = Number.parseInt(version.split('.')[0] ?? '', 10)
   return major >= MINIMUM_MAJOR
     ? `The \`pwsh\` tool on this machine runs PowerShell ${version}, so \`&&\` and \`||\` work in one command.`
-    : `The \`pwsh\` tool on this machine runs Windows PowerShell ${version}: \`&&\` and \`||\` are parse errors there, so chain commands with \`;\` or separate calls.`
+    : `The \`pwsh\` tool is blocked by dsh-win-pwsh7: it would run Windows PowerShell ${version}, where \`&&\` and \`||\` are parse errors. Do not call it or chain commands with \`;\`; tell the user PowerShell 7 must be installed or configured, then call pwsh7_status for the exact patch, call pwsh7_install only after they agree, or disable this plugin.`
 }
 
 /**
@@ -1486,7 +1673,7 @@ function runtimeNoteFor(rows, status) {
   if (version !== undefined) return hintFor(version)
   const broken = rows.find((row) => row.pwshPath !== undefined && !isSpawnable(row.pwshPath))
   if (broken !== undefined) {
-    return `The \`pwsh\` tool cannot start: an executor row pins ${broken.pwshPath}, which does not exist. Install PowerShell 7 from the Microsoft Store (\`pwsh7_install\`), or disable this plugin if PowerShell 7 is not wanted here.`
+    return `The \`pwsh\` tool cannot start: an executor row pins ${broken.pwshPath}, which does not exist. dsh-win-pwsh7 blocks calls until this is fixed. Install PowerShell 7 from the Microsoft Store (\`pwsh7_install\`), call \`pwsh7_status\` for the exact patch, or disable this plugin if PowerShell 7 is not wanted here.`
   }
   return ''
 }
