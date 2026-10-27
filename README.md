@@ -26,17 +26,17 @@
 
 ## 与 dsh-ops 共存
 
-默认开启（0.2.2 已在多会话中验证）。检测到 dsh-ops 时，插件会向当前 profile 的 `cordis.patch.yml` 写入一条带标记的 `dsh-ops-compat` 覆盖，启用 dsh-ops 的 Compatibility 模式；重启 DSH 后官方 `pwsh` 恢复，`ops_bash` 保留。
+默认开启。启用由 `cordis.patch.yml` 的声明式 `dsh-ops-compat` 覆盖负责：只要 dsh-win-pwsh7 的 bundle 安装且位于 dsh-ops 之后，重启 DSH 后官方 `pwsh` 恢复，`ops_bash` 保留。关闭开关时只写入一条带标记的 disable override；卸载 bundle 后启用覆盖消失，cleanup 会尽力删除 disable override。
 
 0.2.1 的桥接层在计算隐藏集合时读取了限制后的可见工具，会在隐藏/恢复之间振荡并卡死宿主；0.2.2 改为读取限制前的 `knownNames` / `restrictableNames`，并过滤 `tools.restrict()` 不接受的名字。多会话验证通过后已恢复默认开启。
 
-桥接层还会在对应 OPS 工具可见时隐藏官方 `read` / `glob` / `grep`，以及重复的官方 `bash` / `pwsh_persistent`，让工具面保持 `pwsh` + `ops_bash`。关闭开关只移除本插件写入的那条覆盖；卸载清理是 best-effort，最多残留一条无害的兼容行。
+桥接层还会在对应 OPS 工具可见时隐藏官方 `read` / `glob` / `grep`，以及重复的官方 `bash` / `pwsh_persistent`，让工具面保持 `pwsh` + `ops_bash`。桥接实现独立在 `lib/dsh-ops-bridge.js`，删除该模块和入口挂载即可移除。
 
 ## 安装本插件
 
 ```powershell
 # 从 GitHub 安装（推荐锁定 tag）
-dsh plugin --profile desktop add github:XinSpark/dsh-win-pwsh7#v0.2.2
+dsh plugin --profile desktop add github:XinSpark/dsh-win-pwsh7#v0.2.3
 # 或 npm
 dsh plugin --profile desktop add dsh-win-pwsh7
 ```

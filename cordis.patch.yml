@@ -4,3 +4,9 @@
 - insert:
     - id: win-pwsh7
       name: dsh-win-pwsh7
+# Coexistence override: keep dsh-ops Compatibility on while this bundle is installed. The
+# loader warns and skips the override when dsh-ops is absent; the profile switch writes the
+# matching disable row only when the user turns coexistence off.
+- id: dsh-ops-compat
+  name: dsh-ops/compat
+  disabled: false

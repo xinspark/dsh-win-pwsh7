@@ -51,7 +51,8 @@ mkdirSync(join(gateHome, 'bin'), { recursive: true })
 process.env.LOCALAPPDATA = gateHome
 process.env.PATH = join(gateHome, 'bin')
 
-const { apply, bridgeDenyNames, toolNameFacts } = await import('../index.js')
+const { apply } = await import('../index.js')
+const { bridgeDenyNames, toolNameFacts } = await import('../lib/dsh-ops-bridge.js')
 
 /** An ordinary executable that exists on every Windows machine; its version comes from the stub. */
 const ORDINARY = 'C:\\Windows\\System32\\cmd.exe'
@@ -653,7 +654,7 @@ if (existsSync(MSI)) {
 // --- dsh-ops compatibility patch ---------------------------------------------------------
 const compatDir = mkdtempSync(join(tmpdir(), 'dsh-win-pwsh7-compat-'))
 const compatPatchPath = join(compatDir, 'cordis.patch.yml')
-writeFileSync(compatPatchPath, '- id: keep-me\n  name: keep-me\n', 'utf8')
+writeFileSync(compatPatchPath, '# dsh-win-pwsh7: dsh-ops compatibility (managed)\n- id: dsh-ops-compat\n  disabled: false\n- id: keep-me\n  name: keep-me\n', 'utf8')
 const savedProfileDir = process.env.DSH_PROFILE_DIR
 process.env.DSH_PROFILE_DIR = compatDir
 const compatMachine = makeContext({
@@ -666,29 +667,62 @@ const compatMachine = makeContext({
 apply(compatMachine.ctx, {})
 await new Promise((resolve) => setTimeout(resolve, 50))
 const compatWritten = readFileSync(compatPatchPath, 'utf8')
-check('dsh-ops coexistence writes a marked compatibility override', () => {
-  assert.match(compatWritten, /dsh-win-pwsh7: dsh-ops compatibility \(managed\)/u)
-  assert.match(compatWritten, /- id: dsh-ops-compat\n  disabled: false/u)
+check('the enabled path delegates to the bundle and removes a legacy managed override', () => {
+  assert.ok(!compatWritten.includes('dsh-win-pwsh7: dsh-ops compatibility'), 'a managed block survived')
+  assert.ok(!compatWritten.includes('- id: dsh-ops-compat'), 'the bundle-owned override was written into the profile')
   assert.match(compatWritten, /- id: keep-me/u, 'the user patch entry was lost')
 })
 apply(compatMachine.ctx, { dshOpsCompat: false })
 await new Promise((resolve) => setTimeout(resolve, 50))
-const compatRemoved = readFileSync(compatPatchPath, 'utf8')
-check('turning coexistence off removes only the managed override', () => {
-  assert.ok(!compatRemoved.includes('dsh-win-pwsh7: dsh-ops compatibility'), 'the managed block survived')
-  assert.ok(compatRemoved.includes('- id: keep-me'), 'the user patch entry was removed')
+const compatDisabled = readFileSync(compatPatchPath, 'utf8')
+check('turning coexistence off writes only the managed disable override', () => {
+  assert.match(compatDisabled, /dsh-win-pwsh7: dsh-ops compatibility disabled \(managed\)/u)
+  assert.match(compatDisabled, /- id: dsh-ops-compat\n  disabled: true/u)
+  assert.ok(!compatDisabled.includes('dsh-win-pwsh7: dsh-ops compatibility (managed)'), 'the enable marker survived')
+  assert.ok(compatDisabled.includes('- id: keep-me'), 'the user patch entry was removed')
 })
 apply(compatMachine.ctx, { dshOpsCompat: true })
 await new Promise((resolve) => setTimeout(resolve, 50))
 const compatReenabled = readFileSync(compatPatchPath, 'utf8')
-check('turning coexistence back on restores the managed override', () => {
-  assert.match(compatReenabled, /dsh-win-pwsh7: dsh-ops compatibility \(managed\)/u)
-  assert.match(compatReenabled, /- id: dsh-ops-compat\n  disabled: false/u)
+check('turning coexistence back on removes the disable override for the bundle', () => {
+  assert.ok(!compatReenabled.includes('dsh-win-pwsh7: dsh-ops compatibility'), 'a managed block survived')
+  assert.ok(!compatReenabled.includes('- id: dsh-ops-compat'), 'the bundle-owned override was written into the profile')
   assert.ok(compatReenabled.includes('- id: keep-me'), 'the user patch entry was removed')
 })
 if (savedProfileDir === undefined) delete process.env.DSH_PROFILE_DIR
 else process.env.DSH_PROFILE_DIR = savedProfileDir
 rmSync(compatDir, { recursive: true, force: true })
+
+check('the bundle patch owns the enabled compatibility override', () => {
+  const patch = readFileSync(new URL('../cordis.patch.yml', import.meta.url), 'utf8')
+  assert.match(patch, /^- id: dsh-ops-compat\n  name: dsh-ops\/compat\n  disabled: false$/mu)
+})
+
+const orderDir = mkdtempSync(join(tmpdir(), 'dsh-win-pwsh7-order-'))
+writeFileSync(join(orderDir, 'package.json'), JSON.stringify({
+  dsh: { profile: { bundles: ['dsh-win-pwsh7', 'dsh-ops'] } },
+}), 'utf8')
+writeFileSync(join(orderDir, 'cordis.patch.yml'), '- id: keep-me\n  name: keep-me\n', 'utf8')
+const savedOrderDir = process.env.DSH_PROFILE_DIR
+process.env.DSH_PROFILE_DIR = orderDir
+const orderMachine = makeContext({
+  pluginManager: {
+    async listBundles() {
+      return [{ name: 'dsh-ops', installed: true, rows: [{ moduleName: 'dsh-ops/compat' }] }]
+    },
+  },
+})
+apply(orderMachine.ctx, {})
+await new Promise((resolve) => setTimeout(resolve, 50))
+const orderPatch = readFileSync(join(orderDir, 'cordis.patch.yml'), 'utf8')
+check('a reversed bundle order keeps the profile fallback instead of silently disabling compatibility', () => {
+  assert.match(orderPatch, /dsh-win-pwsh7: dsh-ops compatibility \(managed\)/u)
+  assert.match(orderPatch, /- id: dsh-ops-compat\n  disabled: false/u)
+  assert.ok(orderPatch.includes('- id: keep-me'))
+})
+if (savedOrderDir === undefined) delete process.env.DSH_PROFILE_DIR
+else process.env.DSH_PROFILE_DIR = savedOrderDir
+rmSync(orderDir, { recursive: true, force: true })
 
 // --- agent bridge hides only the duplicate tools ------------------------------------------
 const bridgeDenies = []

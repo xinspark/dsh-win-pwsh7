@@ -31,10 +31,10 @@ default executor then chooses the runtime itself, and the plugin still never wri
 
 ## Coexistence with dsh-ops
 
-On by default (validated across multiple sessions in 0.2.2). When dsh-ops is installed, the plugin
-writes a marked `dsh-ops-compat` override into the active profile patch and enables dsh-ops
-Compatibility mode; after a DSH restart the native `pwsh` tool is back and `ops_bash` remains
-available.
+On by default. The `dsh-ops-compat` override in `cordis.patch.yml` owns the enabled state: while
+the dsh-win-pwsh7 bundle is installed and comes after dsh-ops, a DSH restart restores the native
+`pwsh` tool and keeps `ops_bash`. Turning the switch off writes only a marked disable override;
+removing the bundle removes the enable override, and cleanup best-effort removes the disable one.
 
 The 0.2.1 bridge planned from the post-restriction visible set, which made it hide and restore the
 same tools in a loop and starved the Host main thread. 0.2.2 plans from the pre-restriction
@@ -44,7 +44,7 @@ multi-session validation passed, so the switch is default-on again.
 ## Install this plugin
 
 ```powershell
-dsh plugin --profile desktop add github:XinSpark/dsh-win-pwsh7#v0.2.2
+dsh plugin --profile desktop add github:XinSpark/dsh-win-pwsh7#v0.2.3
 # or
 dsh plugin --profile desktop add dsh-win-pwsh7
 ```

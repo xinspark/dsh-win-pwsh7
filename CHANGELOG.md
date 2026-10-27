@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.3 — removable dsh-ops coexistence bridge
+
+- Moved the bridge, profile-patch ownership, and pure name planning into `lib/dsh-ops-bridge.js`.
+  `index.js` now mounts it in one place; `package.json` ships the module.
+- Enabled coexistence declaratively from `cordis.patch.yml`; the plugin no longer writes an
+  enable override into the profile. Turning the switch off writes only a marked disable override.
+- Removal contract: delete the module, the mount line, the config field, the client switch, and its
+  gate; the bundle patch disappears with the package. A switch-off override is the only possible
+  profile residue and is removed by the plugin's cleanup when it runs.
+- The bundle patch must come after `dsh-ops` in `dsh.profile.bundles`; otherwise the loader warns
+  and skips it. The profile keeps `dsh-ops` before `dsh-win-pwsh7`.
+
 ## 0.2.2 — fix the dsh-ops bridge freeze
 
 - Fixed the 0.2.1 hide/unhide oscillation that could pin the Host main thread when many sessions
