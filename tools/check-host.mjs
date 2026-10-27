@@ -41,6 +41,8 @@ register('./node-app-modules-hook.mjs', import.meta.url)
 // Small but non-zero: the re-probe must be slow enough that a cancel can land *during* the loop.
 process.env.DSH_WIN_PWSH7_RECHECK_MS = '5'
 process.env.DSH_WIN_PWSH7_TICK_MS = '5'
+// Every pwsh pre-execute refreshes the gate in this gate, so the mutable-reading case is fast.
+process.env.DSH_WIN_PWSH7_GATE_TTL_MS = '0'
 // The install preflight resolves winget through this override, so the gate never depends on the
 // author's PATH. The no-winget case clears it for one assertion.
 process.env.DSH_WIN_PWSH7_WINGET = 'winget.exe'
@@ -417,6 +419,31 @@ check('gate: a broken pin denies as cannot-start, naming the path', () => {
 check('gate: the plugin’s own recovery tools are never denied', () => {
   assert.equal(fiveOne.machine.guards[0]?.({ name: 'pwsh7_status' }), undefined)
   assert.equal(fiveOne.machine.guards[0]?.({ name: 'pwsh7_install' }), undefined)
+})
+
+// A stale gate must be refreshed by the next pwsh call: that is the seam that makes an install
+// performed outside the plugin visible without a restart.
+const mutableVersions = { [POWERSHELL_51]: '5.1.26100' }
+const refreshMachine = makeContext({ rows: [executorRow(POWERSHELL_51)], versions: mutableVersions })
+apply(refreshMachine.ctx, {})
+await refreshMachine.registered.get('pwsh7_status').execute({}, undefined)
+check('gate refresh: the initial 5.1 reading denies', () => {
+  assert.match(refreshMachine.guards[0]?.({ name: 'pwsh' }), /blocked/u)
+})
+mutableVersions[POWERSHELL_51] = '7.6.6'
+const preExecute = [...(refreshMachine.listeners.get('tools/pre-execute') ?? [])][0]
+assert.ok(preExecute !== undefined, 'apply registered no tools/pre-execute listener')
+await preExecute({ name: 'pwsh' }, async () => ({ kind: 'allow' }))
+check('gate refresh: a pre-execute refresh picks up the new runtime', () => {
+  assert.equal(refreshMachine.guards[0]?.({ name: 'pwsh' }), undefined)
+})
+mutableVersions[POWERSHELL_51] = '5.1.26100'
+const configReload = [...(refreshMachine.listeners.get('app-boot/config-reload') ?? [])][0]
+assert.ok(configReload !== undefined, 'apply registered no app-boot/config-reload listener')
+configReload()
+await flush()
+check('gate refresh: a config reload picks up a reverted runtime', () => {
+  assert.match(refreshMachine.guards[0]?.({ name: 'pwsh' }), /blocked/u)
 })
 
 // This whole half of the gate runs against fixtures on **any** machine: `PATH`, `LOCALAPPDATA`

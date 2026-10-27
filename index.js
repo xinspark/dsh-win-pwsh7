@@ -442,7 +442,7 @@ export function apply(ctx, config) {
     return ctx.on('tools/pre-execute', async (exec, next) => {
       if (exec.name !== 'pwsh') return next()
       try {
-        if (state.gate.state === 'unknown' || Date.now() - state.gate.at > GATE_TTL_MS) {
+        if (state.gate.state === 'unknown' || Date.now() - state.gate.at >= GATE_TTL_MS) {
           await refreshGate(ctx, current())
         }
       } catch {
