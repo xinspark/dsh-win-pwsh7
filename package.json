@@ -1,6 +1,6 @@
 {
   "name": "dsh-win-pwsh7",
-  "version": "0.16.6",
+  "version": "0.16.7",
   "type": "module",
   "description": "Detect and validate PowerShell 7 for the Harness pwsh tool on Windows, and install it on request through the Microsoft Store — scripted or manual — while the pwsh tool stays blocked until a PowerShell 7 runtime actually resolves.",
   "license": "MIT",

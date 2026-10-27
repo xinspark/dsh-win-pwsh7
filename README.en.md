@@ -8,8 +8,7 @@ Windows PowerShell 5.1.
 1. **Detect** PowerShell 7 on the machine (plus an optional `overridePath`);
 2. **Validate** an explicit path (`pwsh7_status`'s `path` argument);
 3. **Install** via the script path (`pwsh7_install` opens the Microsoft Store page and clicks
-   Install) or the manual path (Win+R, same Store link). There is no automatic startup install and
-   no winget installer.
+   Install) or the manual path (Win+R, same Store link). There is no automatic startup install.
 
 While enabled, the `pwsh` tool is allowed **only when the live executor resolves to PowerShell 7+**.
 Otherwise every call is denied by `ctx.tools.guard` before dispatch, the model is told to configure /
@@ -19,7 +18,7 @@ runtime; the plugin still never writes `pwshPath`.
 ## Install this plugin
 
 ```powershell
-dsh plugin --profile desktop add github:XinSpark/dsh-win-pwsh7#v0.16.6
+dsh plugin --profile desktop add github:XinSpark/dsh-win-pwsh7#v0.16.7
 # or
 dsh plugin --profile desktop add dsh-win-pwsh7
 ```
@@ -58,8 +57,8 @@ The count lives in the current process and resets when DSH restarts.
 |---|---|---|
 | `overridePath` | unset | Priority ① explicit `pwsh.exe`. It must spawn and report PowerShell 7+; a failed validation falls back to auto-detection. **It only changes probing and recommendations, not executor wiring.** |
 
-`overridePath` is `volatile()`: the plugin-page card saves it live; it can also be set in the profile
-patch:
+`overridePath` is `volatile()`: the plugin-page configuration section saves it live; it can also be
+set in the profile patch:
 
 ```yaml
 - id: win-pwsh7
@@ -67,7 +66,7 @@ patch:
     overridePath: 'D:\tools\pwsh\pwsh.exe'
 ```
 
-There is no `installIfMissing` configuration and no startup auto-install.
+There is no startup auto-install.
 
 ## Recommended companion
 
@@ -98,8 +97,8 @@ executor / disable the plugin.
 
 ## Plugin page
 
-The diagnostics section shows the same report as `pwsh7_status`, with Re-detect beside the status
-title; the configuration card exposes only `overridePath`.
+The status section shows the current runtime, state and executor path, with Re-detect beside the
+title; the configuration section exposes only `overridePath`.
 
 ## Verification
 

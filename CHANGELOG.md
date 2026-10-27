@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.16.7 — release cleanup
+
+- Removed the retired internal `method: 'store'` / winget install route. `pwsh7_install` has only
+  the Store-page script path plus the manual path; the tool schema never exposed the winget route.
+- Removed the winget-only job spec, log follower, download measurement, failure-code translation,
+  inline fallback, constants, imports, and their test fixtures. The host gate now drives only the
+  Store-UI job, the VPN confirmation, the breaker, the disabled-row report, and activation.
+- Deleted `docs/acceptance-0.13.0.md`, which described the retired metered/winget behaviour.
+- READMEs no longer mention `installIfMissing`, the winget installer, or a "configuration card";
+  they describe the current two install paths and the status card.
+
 ## 0.16.6 — status card matching the official provider card
 
 - The status section is now a native bordered card with an inner estimate/facts surface, matching
