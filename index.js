@@ -203,6 +203,9 @@ const STORE_PROTOCOL = `ms-windows-store://pdp/?ProductId=${STORE_PRODUCT_ID}`
 /** The exact manual install the model should relay: Win+R, paste, Enter, click Install. */
 const MANUAL_STORE_STEPS = `press Win+R, paste ${STORE_PROTOCOL} and press Enter; if the Store page does not load, disconnect any VPN and fully restart Microsoft Store; then click Install`
 
+/** Shown after a working PowerShell 7 is detected, and in the successful install verdict. */
+const COMPANION_RECOMMENDATION = 'Recommended companion: dsh-ops — native file/PTC tools and Windows host PowerShell integration pair well with dsh-win-pwsh7. It is not installed automatically; install it with: dsh plugin --profile <profile> add dsh-ops'
+
 /**
  * How long winget may sit after handing the install to the Microsoft Store before the progress line
  * names the queue. The measured failure is a Store entry parked in "Queued" with the download not
@@ -431,7 +434,7 @@ export function apply(ctx, config) {
           const config = current()
           const status = await detect(ctx, config)
           const report = await renderStatus(ctx, config, { status, explicitPath: args?.path })
-          return { report }
+          return { report: status.chosen === undefined ? report : `${report}\n\n${COMPANION_RECOMMENDATION}` }
         }
       })))
       cleanups.push(ctx.tools.register(defineTool({
@@ -1199,7 +1202,10 @@ function storeUiJobSpec(ctx, config, exec) {
               ]
             } else if (installed) {
               resetInstallFailures(ctx)
-              verdict = [`PowerShell ${after.chosen.version} is now installed (${after.chosen.path}, ${labelOf(after.chosen)}); the pwsh tool is ready.`]
+              verdict = [
+                `PowerShell ${after.chosen.version} is now installed (${after.chosen.path}, ${labelOf(after.chosen)}); the pwsh tool is ready.`,
+                COMPANION_RECOMMENDATION,
+              ]
             } else {
               verdict = [
                 'The Store page opened and Install was clicked. Microsoft Store is downloading/installing in the background.',

@@ -14,7 +14,7 @@
 
 ```powershell
 # 从 GitHub 安装（推荐锁定 tag）
-dsh plugin --profile desktop add github:XinSpark/dsh-win-pwsh7#v0.16.0
+dsh plugin --profile desktop add github:XinSpark/dsh-win-pwsh7#v0.16.1
 # 或 npm
 dsh plugin --profile desktop add dsh-win-pwsh7
 ```
@@ -57,6 +57,14 @@ dsh plugin --profile desktop add dsh-win-pwsh7
 ```
 
 没有 `installIfMissing` 配置，也没有启动时自动安装。
+
+## 推荐搭配
+
+PowerShell 7 可用后，插件报告会推荐搭配 **dsh-ops**：它提供原生文件/PTC 工具和 Windows 宿主 PowerShell 集成，和本插件的 PowerShell 7 运行时配合更佳。**不会自动安装**，需要时执行：
+
+```powershell
+dsh plugin --profile <profile> add dsh-ops
+```
 
 ## 报告示例
 

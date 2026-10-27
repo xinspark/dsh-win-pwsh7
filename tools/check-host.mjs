@@ -303,6 +303,10 @@ check('config guidance: overridePath is explicitly not executor wiring', () => {
   assert.match(overrideReport, /overridePath is only what this plugin probes/u)
   assert.match(overrideReport, /pwshPath: 'C:\\Windows\\System32\\cmd\.exe'/u)
 })
+check('status: a healthy runtime recommends the dsh-ops companion', () => {
+  assert.match(overrideReport, /dsh-ops/u)
+  assert.match(overrideReport, /not installed automatically/u)
+})
 
 const replaceMachine = makeContext({
   rows: [{

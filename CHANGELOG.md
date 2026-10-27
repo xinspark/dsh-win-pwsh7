@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.16.1 — recommend dsh-ops after a working runtime appears
+
+- `pwsh7_status` appends a companion recommendation once a usable PowerShell 7 is detected, and a
+  successful Store-UI install includes it in the job verdict: **dsh-ops** — native file/PTC tools
+  plus Windows host PowerShell integration — pairs well with this plugin. It is explicitly not
+  installed automatically; the suggested command is
+  `dsh plugin --profile <profile> add dsh-ops`.
+- Both READMEs document the recommendation.
+- Host gate asserts a healthy status report names `dsh-ops` and says it is not installed
+  automatically.
+
 ## 0.16.0 — no startup auto-install, three-failure breaker
 
 - **`installIfMissing` is gone.** The config field, its activation branch, the install-attempt report
