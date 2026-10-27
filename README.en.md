@@ -33,18 +33,19 @@ Disabling the plugin restores the default runtime; the plugin still never writes
   hint and the failure verdict all offer pause → resume, disable any VPN and fully restart
   Microsoft Store, and the manual Store page. Poll a job in **30-second rounds** with
   `job_output(wait:true, timeout_ms:30000)` + `job_list`; `wait aborted` is not a failure. The
-  settled state is injected into the model context.
+  settled state is no longer injected into the model context.
+- Before any install, `pwsh7_install` asks the model to confirm with the user that no VPN is active
+  (`vpnOffConfirmed: true`); without that confirmation it starts nothing.
 - Manual install is spelled out: press Win+R, paste
   `ms-windows-store://pdp/?ProductId=9MZ1SNWT0N5D`, press Enter, click Install. A manual install is
   detected automatically; no pin is needed.
-- `store-ui` is the default install method: it opens that Store page and invokes its localized
-  Install button with Windows UI Automation. If no Install button appears in 90 seconds, it asks
-  the user to disconnect any VPN, fully quit and restart Microsoft Store, then retry (or use the
-  Win+R path). `method: 'store'` keeps the winget background install.
-- The install preflight is mandatory for an active network and a non-metered connection. Metered /
-  `Unknown` / a failed probe **start no install job** and name the setting to turn off; winget is
-  only required for `method: 'store'`. VPN is no longer auto-detected — it is raised only when the
-  Store page fails to load.
+- `store-ui` is the default install method: it shows an explicit notice (do not close the Store
+  window; cancel if a VPN is on), opens that Store page, and invokes its localized Install button
+  with Windows UI Automation. If no Install button appears in 90 seconds, it asks the user to
+  disconnect any VPN, fully quit and restart Microsoft Store, then retry (or use the Win+R path).
+  `method: 'store'` keeps the winget background install.
+- There is no metered/network preflight anymore: the Store-UI path is the manual Store page, and
+  the winget method no longer probes the connection. winget is only required for `method: 'store'`.
 - When the gate blocks, the answer has three paths: **configure** an installed PowerShell 7
   (`pwsh7_status` prints the `pwsh-sandbox.pwshPath` patch and reload), **install** (auto or
   manual), or disable the plugin.

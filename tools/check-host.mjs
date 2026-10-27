@@ -576,7 +576,7 @@ if (existsSync(MSI)) {
   process.env.LOCALAPPDATA = aliasRoot
   apply(storeMachine.ctx, {})
   const preferReport = (await storeMachine.registered.get('pwsh7_status').execute({}, undefined)).report
-  const installReport = (await storeMachine.registered.get('pwsh7_install').execute({ method: 'store' }, undefined)).report
+  const installReport = (await storeMachine.registered.get('pwsh7_install').execute({ method: 'store', vpnOffConfirmed: true }, undefined)).report
   process.env.PATH = savedPath
   process.env.LOCALAPPDATA = savedLocalAppData
   rmSync(storeRoot, { recursive: true, force: true })
@@ -613,7 +613,7 @@ if (existsSync(MSI)) {
   process.env.PATH = `${jobRoot};${jobVersionedDir};${savedPath}`
   process.env.LOCALAPPDATA = jobAliasRoot
   apply(jobMachine.ctx, {})
-  const startedReport = (await jobMachine.registered.get('pwsh7_install').execute({ method: 'store' }, undefined)).report
+  const startedReport = (await jobMachine.registered.get('pwsh7_install').execute({ method: 'store', vpnOffConfirmed: true }, undefined)).report
   const spec = jobMachine.jobSpecs[0]
   const jobStub = {
     progress: [],
@@ -633,7 +633,7 @@ if (existsSync(MSI)) {
   // the machine looks uninstalled again and the install path runs once more.
   delete jobVersions[jobAlias]
   apply(jobMachine.ctx, {})
-  await jobMachine.registered.get('pwsh7_install').execute({ method: 'store' }, undefined)
+  await jobMachine.registered.get('pwsh7_install').execute({ method: 'store', vpnOffConfirmed: true }, undefined)
   const runningStub = { progress: [], updateProgress(line) { this.progress.push(line) }, append() {} }
   jobMachine.jobSpecs[1].run(runningStub)
 
@@ -646,28 +646,20 @@ if (existsSync(MSI)) {
     assert.ok(!/finished successfully/u.test(startedReport), 'the call must not wait for the install')
   })
 
-  // The settle happens after the model stopped looking; the owning agent gets a short note so the
-  // next step knows the gate changed.
-  const injected = []
-  const agentStub = { id: 'agent-test', inject(text) { injected.push(text) } }
-  const injectMachine = makeContext({ rows: [executorRow(undefined)], versions: {}, deferred: true, jobs: true })
-  apply(injectMachine.ctx, {})
-  await injectMachine.registered.get('pwsh7_install').execute({ method: 'store' }, { agent: agentStub })
-  const injectStub = { progress: [], appended: [], updateProgress() {}, append() {} }
-  const injectHooks = injectMachine.jobSpecs[0].run(injectStub)
-  injectMachine.settleAll()
-  await injectHooks.done
-  check('install job: the settled state is injected into the agent context', () => {
-    assert.ok(injected.length > 0, 'the install result was never injected')
-    const text = injected[0]?.content?.[0]?.text ?? ''
-    assert.match(text, /pwsh tool remains blocked/u)
+  // The install refuses to start until the model has asked the user about the VPN.
+  const confirmMachine = makeContext({ rows: [executorRow(undefined)], versions: {}, deferred: true, jobs: true })
+  apply(confirmMachine.ctx, {})
+  const confirmReport = (await confirmMachine.registered.get('pwsh7_install').execute({}, undefined)).report
+  check('install: a missing VPN confirmation asks the user and starts nothing', () => {
+    assert.equal(confirmMachine.jobSpecs.length, 0)
+    assert.match(confirmReport, /VPN/u)
+    assert.match(confirmReport, /vpnOffConfirmed: true/u)
+    assert.match(confirmReport, /Store window will open/u)
   })
 
-  const uiInjected = []
-  const uiAgent = { id: 'agent-ui', inject(text) { uiInjected.push(text) } }
   const uiMachine = makeContext({ rows: [executorRow(undefined)], versions: {}, deferred: true, jobs: true })
   apply(uiMachine.ctx, {})
-  const uiReport = (await uiMachine.registered.get('pwsh7_install').execute({ method: 'store-ui' }, { agent: uiAgent })).report
+  const uiReport = (await uiMachine.registered.get('pwsh7_install').execute({ method: 'store-ui', vpnOffConfirmed: true }, undefined)).report
   const uiStub = { progress: [], appended: [], updateProgress(line) { this.progress.push(line) }, append(text) { this.appended.push(text) } }
   const uiHooks = uiMachine.jobSpecs[0].run(uiStub)
   uiMachine.settleAll()
@@ -678,14 +670,13 @@ if (existsSync(MSI)) {
     assert.match(uiMachine.jobSpecs[0].label, /Microsoft Store UI/u)
     assert.match(uiStub.progress[0], /opening the Microsoft Store page/u)
     assert.match(uiOutcome.result, /Store page opened and Install was clicked/u)
-    assert.match(uiInjected[0]?.content?.[0]?.text ?? '', /Store install was started/u)
   })
 
   const uiFailMachine = makeContext({ rows: [executorRow(undefined)], versions: {}, deferred: true, jobs: true })
   uiFailMachine.state.storeUiExit = 2
   uiFailMachine.state.storeUiStdout = 'STORE_UI_NOT_FOUND\r\n'
   apply(uiFailMachine.ctx, {})
-  await uiFailMachine.registered.get('pwsh7_install').execute({ method: 'store-ui' }, undefined)
+  await uiFailMachine.registered.get('pwsh7_install').execute({ method: 'store-ui', vpnOffConfirmed: true }, undefined)
   const uiFailHooks = uiFailMachine.jobSpecs[0].run({ progress: [], appended: [], updateProgress() {}, append() {} })
   uiFailMachine.settleAll()
   const uiFailOutcome = await uiFailHooks.done
@@ -711,10 +702,9 @@ if (existsSync(MSI)) {
     assert.match(jobOutcome.result, /PowerShell 7\.6\.6/u)
     assert.match(jobStub.appended.join('\n'), /is now in place/u, 'the verdict must land in the job output ring')
   })
-  check('install job: progress is reported, and a stalled Store run names both possibilities', () => {
+  check('install job: progress is reported, and a stalled Store run names the queue', () => {
     assert.match(jobStub.progress[0], /Store may be queued/u)
     assert.match(jobStub.progress[0], /pause and resume/u)
-    assert.match(jobStub.progress[0], /metered/u)
     assert.match(jobStub.progress[0], /job_kill/u)
     assert.match(runningStub.progress[0], /^running \d+m$/u)
   })
@@ -735,7 +725,7 @@ if (existsSync(MSI)) {
   const lyingMachine = makeContext({ rows: [executorRow(undefined)], versions: lyingVersions, deferred: true, jobs: true })
   lyingMachine.state.wingetExit = 1
   apply(lyingMachine.ctx, {})
-  await lyingMachine.registered.get('pwsh7_install').execute({ method: 'store' }, undefined)
+  await lyingMachine.registered.get('pwsh7_install').execute({ method: 'store', vpnOffConfirmed: true }, undefined)
   flipAfter = aliasProbes + 1
   const lyingStub = { progress: [], appended: [], updateProgress(line) { this.progress.push(line) }, append(text) { this.appended.push(text) } }
   const lyingHooks = lyingMachine.jobSpecs[0].run(lyingStub)
@@ -759,7 +749,7 @@ if (existsSync(MSI)) {
   const storeRouteMachine = makeContext({ rows: [executorRow(undefined)], versions: {}, deferred: true, jobs: true })
   storeRouteMachine.state.wingetExit = 1
   apply(storeRouteMachine.ctx, {})
-  await storeRouteMachine.registered.get('pwsh7_install').execute({ method: 'store' }, undefined)
+  await storeRouteMachine.registered.get('pwsh7_install').execute({ method: 'store', vpnOffConfirmed: true }, undefined)
   const storeSpec = storeRouteMachine.jobSpecs[0]
   const storeStub = { progress: [], appended: [], updateProgress(line) { this.progress.push(line) }, append(text) { this.appended.push(text) } }
   const realNow2 = Date.now
@@ -784,7 +774,7 @@ if (existsSync(MSI)) {
   codeMachine.state.wingetExit = 1
   codeMachine.state.wingetStdout = 'Started MSStore package execution. ProductId: 9MZ1SNWT0N5D\r\n无法安装或更新 Microsoft Store 程序包。错误代码: 0x80d03801\r\n'
   apply(codeMachine.ctx, {})
-  await codeMachine.registered.get('pwsh7_install').execute({ method: 'store' }, undefined)
+  await codeMachine.registered.get('pwsh7_install').execute({ method: 'store', vpnOffConfirmed: true }, undefined)
   const codeStub = { progress: [], appended: [], updateProgress(line) { this.progress.push(line) }, append(text) { this.appended.push(text) } }
   const codeHooks = codeMachine.jobSpecs[0].run(codeStub)
   codeMachine.settleAll()
@@ -797,75 +787,26 @@ if (existsSync(MSI)) {
   })
 
   // The one probe that turns "the Store just sits there" into a named cause. The stub answers the
-  // Windows PowerShell 5.1 probe with a metered reading, so the report has to carry the warning.
-  const fiftyOne = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
-  const meteredMachine = makeContext({
-    rows: [executorRow(undefined)],
-    versions: { [fiftyOne]: 'Fixed|FixtureNet-5G' },
-    deferred: true,
-    jobs: true,
-  })
-  apply(meteredMachine.ctx, {})
-  const meteredReport = (await meteredMachine.registered.get('pwsh7_install').execute({ method: 'store' }, undefined)).report
   const clearMachine = makeContext({ rows: [executorRow(undefined)], versions: {}, deferred: true, jobs: true })
   apply(clearMachine.ctx, {})
-  const clearReport = (await clearMachine.registered.get('pwsh7_install').execute({ method: 'store' }, undefined)).report
-
-  const unknownMachine = makeContext({ rows: [executorRow(undefined)], versions: {}, network: null, deferred: true, jobs: true })
-  apply(unknownMachine.ctx, {})
-  const unknownReport = (await unknownMachine.registered.get('pwsh7_install').execute({ method: 'store' }, undefined)).report
+  const clearReport = (await clearMachine.registered.get('pwsh7_install').execute({ method: 'store', vpnOffConfirmed: true }, undefined)).report
 
   const savedWinget = process.env.DSH_WIN_PWSH7_WINGET
   process.env.DSH_WIN_PWSH7_WINGET = ''
   const noWingetMachine = makeContext({ rows: [executorRow(undefined)], versions: {}, deferred: true, jobs: true })
   apply(noWingetMachine.ctx, {})
-  const noWingetReport = (await noWingetMachine.registered.get('pwsh7_install').execute({ method: 'store' }, undefined)).report
+  const noWingetReport = (await noWingetMachine.registered.get('pwsh7_install').execute({ method: 'store', vpnOffConfirmed: true }, undefined)).report
   process.env.DSH_WIN_PWSH7_WINGET = savedWinget
 
-  check('install preflight: an unrestricted connection starts the job', () => {
+  check('install: the store method starts the job without a network preflight', () => {
     assert.equal(clearMachine.jobSpecs.length, 1)
-    assert.ok(!/not started/iu.test(clearReport), `the report blocked a usable connection: ${clearReport.slice(0, 240)}`)
+    assert.ok(!/not started/iu.test(clearReport), `the report blocked a usable install: ${clearReport.slice(0, 240)}`)
   })
-  check('install preflight: a metered connection starts no job and names the fix', () => {
-    assert.equal(meteredMachine.jobSpecs.length, 0)
-    assert.match(meteredReport, /Install not started/u)
-    assert.match(meteredReport, /Win\+R/u)
-  })
-  check('install preflight: an unreadable cost is refused, not guessed', () => {
-    assert.equal(unknownMachine.jobSpecs.length, 0)
-    assert.match(unknownReport, /could not be determined/u)
-  })
-  check('install preflight: a missing winget is refused with the manual path', () => {
+  check('install: a missing winget points at store-ui instead of blocking', () => {
     assert.equal(noWingetMachine.jobSpecs.length, 0)
-    assert.match(noWingetReport, /winget was not found/u)
-    assert.match(noWingetReport, /winget install/u)
-  })
-  // The status report carries the same warning, but only when there is nothing to run: that is the
-  // state a fresh session lands in after the runtime is uninstalled. The negative case is proved by
-  // the spawn log rather than by wording: with a usable runtime the probe must not run at all, even
-  // when the connection really is metered.
-  const meteredStatus = (await meteredMachine.registered.get('pwsh7_status').execute({}, undefined)).report
-  jobVersions[jobAlias] = '7.6.6'
-  jobVersions[fiftyOne] = 'Fixed|FixtureNet-5G'
-  const probesBefore = jobMachine.spawned.filter((executable) => /powershell\.exe$/iu.test(executable)).length
-  const healthyStatus = (await jobMachine.registered.get('pwsh7_status').execute({}, undefined)).report
-  const probesAfter = jobMachine.spawned.filter((executable) => /powershell\.exe$/iu.test(executable)).length
-
-  check('install: a metered connection is named before the Store route starts, and no other installer is offered', () => {
-    assert.match(meteredReport, /marked as metered/u)
-    assert.match(meteredReport, /FixtureNet-5G/u)
-    assert.match(meteredReport, /Metered connection/u, 'the remedy must name the setting to turn off')
-    assert.ok(!/route "winget"/u.test(meteredReport),
-      'a metered connection is answered by the connection setting, never by another installer')
-    assert.ok(!/msi/iu.test(meteredReport), 'no second installer may be offered as the answer to a metered connection')
-    assert.ok(!/marked as metered/u.test(clearReport), 'an unreadable cost must produce no warning')
-  })
-  check('status: the warning appears only while nothing is usable', () => {
-    assert.match(meteredStatus, /marked as metered/u)
-    assert.match(meteredStatus, /PowerShell 7: not usable/u)
-    assert.match(healthyStatus, /PowerShell 7\.6\.6/u, `healthy report: ${healthyStatus.slice(0, 240)}`)
-    assert.ok(!/marked as metered/u.test(healthyStatus), `a healthy machine must not be warned: ${healthyStatus.slice(0, 240)}`)
-    assert.equal(probesAfter, probesBefore, 'the connection probe must not run while a runtime is usable')
+    assert.match(noWingetReport, /winget method/u)
+    assert.match(noWingetReport, /store-ui/u)
+    assert.match(noWingetReport, /Win\+R/u)
   })
 
   // Progress has to come from winget's own log: with a captured stdout, winget draws no progress
@@ -876,7 +817,7 @@ if (existsSync(MSI)) {
   writeFileSync(logFile, '2026-10-13 23:44:30.385 <I> [CLI ] Installer hash verified\n')
   const logMachine = makeContext({ rows: [executorRow(undefined)], versions: {}, deferred: true, jobs: true })
   apply(logMachine.ctx, {})
-  await logMachine.registered.get('pwsh7_install').execute({ method: 'store' }, undefined)
+  await logMachine.registered.get('pwsh7_install').execute({ method: 'store', vpnOffConfirmed: true }, undefined)
   const logStub = { progress: [], appended: [], updateProgress(line) { this.progress.push(line) }, append(text) { this.appended.push(text) } }
   logMachine.jobSpecs[0].run(logStub)
   await new Promise((resolve) => setTimeout(resolve, 60))
@@ -922,7 +863,7 @@ if (existsSync(MSI)) {
   process.env.TEMP = tempRoot
   const downloadMachine = makeContext({ rows: [executorRow(undefined)], versions: {}, deferred: true, jobs: true })
   apply(downloadMachine.ctx, {})
-  await downloadMachine.registered.get('pwsh7_install').execute({ method: 'store' }, undefined)
+  await downloadMachine.registered.get('pwsh7_install').execute({ method: 'store', vpnOffConfirmed: true }, undefined)
   const downloadStub = { progress: [], appended: [], updateProgress(line) { this.progress.push(line) }, append(text) { this.appended.push(text) } }
   downloadMachine.jobSpecs[0].run(downloadStub)
   await new Promise((resolve) => setTimeout(resolve, 400))
@@ -953,7 +894,7 @@ if (existsSync(MSI)) {
   // process *and* stop the progress timer.
   const cancelMachine = makeContext({ rows: [executorRow(undefined)], versions: {}, deferred: true, jobs: true })
   apply(cancelMachine.ctx, {})
-  await cancelMachine.registered.get('pwsh7_install').execute({ method: 'store' }, undefined)
+  await cancelMachine.registered.get('pwsh7_install').execute({ method: 'store', vpnOffConfirmed: true }, undefined)
   const cancelStub = { progress: [], appended: [], updateProgress(line) { this.progress.push(line) }, append(text) { this.appended.push(text) } }
   const cancelHooks = cancelMachine.jobSpecs[0].run(cancelStub)
   await new Promise((resolve) => setTimeout(resolve, 40))
@@ -984,10 +925,10 @@ if (existsSync(MSI)) {
   })
   const inlineMachine = makeContext({ rows: [executorRow(undefined)], versions: inlineVersions, jobs: false })
   apply(inlineMachine.ctx, {})
-  const inlineReport = (await inlineMachine.registered.get('pwsh7_install').execute({ method: 'store' }, undefined)).report
+  const inlineReport = (await inlineMachine.registered.get('pwsh7_install').execute({ method: 'store', vpnOffConfirmed: true }, undefined)).report
   const refuseMachine = makeContext({ rows: [executorRow(undefined)], versions: {}, jobs: 'refuse' })
   apply(refuseMachine.ctx, {})
-  const refuseReport = (await refuseMachine.registered.get('pwsh7_install').execute({ method: 'store' }, undefined)).report
+  const refuseReport = (await refuseMachine.registered.get('pwsh7_install').execute({ method: 'store', vpnOffConfirmed: true }, undefined)).report
 
   check('install: no job registry means the install runs inline, says so, and still runs winget', () => {
     assert.match(inlineReport, /ran inline/u)
@@ -1046,7 +987,7 @@ if (existsSync(MSI)) {
   const pendingMachine = makeContext({ rows: [executorRow(undefined)], versions: {}, deferred: true, jobs: false })
   apply(pendingMachine.ctx, {})
   const pendingOutcome = await Promise.race([
-    pendingMachine.registered.get('pwsh7_install').execute({ method: 'store' }, undefined).then((value) => ({ report: value.report })),
+    pendingMachine.registered.get('pwsh7_install').execute({ method: 'store', vpnOffConfirmed: true }, undefined).then((value) => ({ report: value.report })),
     new Promise((resolve) => setTimeout(() => resolve({ timeout: true }), 3000)),
   ])
   check('install: an inline install that outlives its grace reports instead of waiting forever', () => {
@@ -1066,7 +1007,7 @@ if (existsSync(MSI)) {
   })
   const lateMachine = makeContext({ rows: [executorRow(undefined)], versions: lateVersions, deferred: true, jobs: true })
   apply(lateMachine.ctx, {})
-  await lateMachine.registered.get('pwsh7_install').execute({ method: 'store' }, undefined)
+  await lateMachine.registered.get('pwsh7_install').execute({ method: 'store', vpnOffConfirmed: true }, undefined)
   const lateStub = { progress: [], appended: [], updateProgress(line) { this.progress.push(line) }, append(text) { this.appended.push(text) } }
   const lateHooks = lateMachine.jobSpecs[0].run(lateStub)
   const lateDone = lateHooks.done
@@ -1134,4 +1075,5 @@ if (failures.length > 0) {
 } else {
   console.log(`ok — ${machine.registered.size} tools, ${stable.machine.sections.length} prompt section: render, policy and runtime-hint checks pass`)
 }
+
 

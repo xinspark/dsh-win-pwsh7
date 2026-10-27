@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.15.0 — VPN confirmation, Store notice, no metered probe, no context injection
+
+The 2026-10-27 run exposed three usability gaps around the Store-UI install and one unnecessary
+mechanism: the model could start an install without asking about the VPN; the Store window could be
+closed because nothing explained it; the metered preflight was no longer relevant to the manual
+Store page; and the injected status note was unwanted.
+
+- **VPN is now a question, not a probe.** `pwsh7_install` requires `vpnOffConfirmed: true`. Without
+  it the tool starts nothing and returns: ask the user whether a VPN is active, have them
+  disconnect it and restart Microsoft Store, then call again. There is no adapter/default-route
+  detection anywhere.
+- **The Store window explains itself.** Before opening the page, the UI script shows a modal
+  `MessageBox`: dsh-win-pwsh7 is about to open Microsoft Store and click Install; do not close the
+  Store window; if a VPN is active, cancel, disconnect it, fully quit/restart Store, then retry.
+  Closing the notice with Cancel exits cleanly and the job reports "cancelled at the Store notice".
+- **Metered/network preflight removed.** `METERED_COST`, `NETWORK_COST_SCRIPT`, `networkCost`,
+  `networkWarning`, the metered status warning and the install preflight are gone. `store-ui` is
+  the manual Store page, where the metered queue behaviour does not apply; `method: 'store'` keeps
+  the winget job but no longer probes the connection.
+- **Context injection removed.** `agent.inject`, `createUserMessage`, the settled-state note and the
+  related contract check are gone; the job output and `pwsh7_status` remain the sources of truth.
+- **Tests.** The host gate asserts the confirmation gate starts no job, a store-ui click job, a
+  page-not-loaded failure with VPN/manual guidance, and no network preflight; the probe environment
+  stays isolated from the host's real PowerShell.
+
 ## 0.14.0 — open the Store page and click Install
 
 The 2026-10-27 test proved that the manual Store page is the path that works, and that a script can
