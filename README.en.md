@@ -35,12 +35,16 @@ Disabling the plugin restores the default runtime; the plugin still never writes
   `job_output(wait:true, timeout_ms:30000)` + `job_list`; `wait aborted` is not a failure. The
   settled state is injected into the model context.
 - Manual install is spelled out: press Win+R, paste
-  `ms-windows-store://pdp/?ProductId=9MZ1SNWT0N5D`, press Enter, click Install (outside a VPN). A
-  manual install is detected automatically; no pin is needed.
-- The install preflight is mandatory: winget present, an active network, and neither metered nor
-  behind an active VPN. Metered / `Unknown` / a failed probe / no winget / VPN **start no install
-  job** and name the network or adapter plus the setting to turn off. VPN detection is a
-  name/default-route heuristic; a false positive still leaves the manual Store path.
+  `ms-windows-store://pdp/?ProductId=9MZ1SNWT0N5D`, press Enter, click Install. A manual install is
+  detected automatically; no pin is needed.
+- `store-ui` is the default install method: it opens that Store page and invokes its localized
+  Install button with Windows UI Automation. If no Install button appears in 90 seconds, it asks
+  the user to disconnect any VPN, fully quit and restart Microsoft Store, then retry (or use the
+  Win+R path). `method: 'store'` keeps the winget background install.
+- The install preflight is mandatory for an active network and a non-metered connection. Metered /
+  `Unknown` / a failed probe **start no install job** and name the setting to turn off; winget is
+  only required for `method: 'store'`. VPN is no longer auto-detected — it is raised only when the
+  Store page fails to load.
 - When the gate blocks, the answer has three paths: **configure** an installed PowerShell 7
   (`pwsh7_status` prints the `pwsh-sandbox.pwshPath` patch and reload), **install** (auto or
   manual), or disable the plugin.

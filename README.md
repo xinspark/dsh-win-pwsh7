@@ -15,11 +15,11 @@
 启用本插件期间，`pwsh` 工具**只在实际执行器解析到 PowerShell 7+ 时才放行**；否则每次调用在 dispatch 之前被 `ctx.tools.guard` 拒绝，错误文案让模型向用户报告“安装 / 配置 / 禁用”三条路，并且**不会启动任何 PowerShell 进程**。禁用插件即恢复默认运行时，插件仍然不写 `pwshPath`。
 
 - 判定读执行器自己的 `ctx.shell.pwshPath`，不是扫配置行；`overridePath` 只影响探测与推荐，**不接线**。
-- 安装前强制预检：winget 在不在、有没有活动网络、连接是不是计量；计量 / `Unknown` / 探测失败 / 无 winget 都**不启动安装作业**，并点名网络与要关掉的设置。
+- 安装前强制预检：有活动网络、连接不是计量；计量 / `Unknown` / 探测失败都**不启动安装作业**，并点名网络与要关掉的设置（`store-ui` 方法不需要 winget）。
+- 默认 `store-ui`：打开 Microsoft Store 的 PowerShell 7 页面，用 Windows UI Automation 自动点「安装」/「获取」；页面 90 秒内没出现安装按钮时，提示用户关闭 VPN、完全重启 Store 后重试，或 Win+R 手动打开同一个 Store 链接。`method: 'store'` 仍可走 winget 后台安装。
 - 安装成功后先尝试刷新执行器缓存的 `pwshPath`；失败时才给「pin + 重载」的精确指引。
 - 自动安装失败时不再无条件归因计量：会重新读连接、翻译 Store 错误码；非计量失败直接指向「Store 已排队（暂停→恢复）」与手动 Store 链接，手动安装同样会被自动识别、无需 pin。
 - 自动安装可能一直停在 Store「排队中」：安装提示、进度行和失败文案都会给出「暂停→恢复」、关闭 VPN 并完全重启 Microsoft Store、以及手动 Store 链接；安装作业请用 **30 秒一轮**的 `job_output(wait:true, timeout_ms:30000)` + `job_list` 轮询，`wait aborted` 不是安装失败。安装结束后状态会注入模型上下文。
-- 安装预检同时检测 **VPN**：活动适配器名/描述命中常见 VPN/TUN 客户端、默认路由经过它，或 `Get-VpnConnection` 为连接状态时，会阻止自动安装，并给出「断开 VPN → 完全退出并重启 Microsoft Store → 重试」或「Win+R → 粘贴 Store 链接 → 安装」。这是名称启发式；即使误判，手动 Store 安装仍可用。
 - 被门禁拦住时给三条路：**配置已装的 PowerShell 7**（`pwsh7_status` 给出 `pwsh-sandbox.pwshPath` patch + 重载）、**安装**（`pwsh7_install` 或 Win+R 手动 Store）、**禁用插件**。
 - 配置引导给出可粘贴的 patch（区分 add / update，并警告 `config` 整体替换）；`pwsh7_status` / `pwsh7_install` 不受门禁，是恢复通道。
 - 详情页的「重新检测」就在状态区标题旁，不再单独占详情页头部动作。

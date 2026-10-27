@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.14.0 — open the Store page and click Install
+
+The 2026-10-27 test proved that the manual Store page is the path that works, and that a script can
+open it and invoke the same Install button with Windows UI Automation. `pwsh7_install` now defaults
+to that route; winget remains available as `method: 'store'`.
+
+- **`store-ui` (default).** It opens
+  `ms-windows-store://pdp/?ProductId=9MZ1SNWT0N5D`, waits up to 90 seconds for the Store window, then
+  invokes the localized Install / 获取 / Get / 更新 / Update button through `UIAutomationClient` and
+  falls back to `LegacyIAccessiblePattern`. This is the same Store page and button a human uses.
+- **A click is not a failed install.** The job reports "Store page opened and Install was clicked —
+  downloading/installing in the background", tells the model not to retry, and asks it to poll
+  `pwsh7_status`; a runtime found within the bounded re-check is reported as installed.
+- **Page-load failure asks about the VPN.** If no Install button appears within the timeout — or the
+  page cannot be opened/invoked — the report says the Store page did not load, and tells the user:
+  disconnect any VPN, fully quit and restart Microsoft Store, then retry; manual Win+R steps remain.
+- **VPN auto-detection is gone.** The 0.13.4 adapter/default-route heuristic was removed; the
+  network probe is back to `<cost>|<profile>` and the only automatic connection gate is metering.
+  The VPN question is asked only when the Store page fails to load, as the user requested.
+- **`store` remains.** `pwsh7_install` with `method: 'store'` runs the existing winget background job
+  with its queue hints and 30-second polling guidance.
+- **Tests.** The host gate drives a successful Store-UI click, a page-not-loaded failure with VPN
+  and manual guidance, and keeps all winget tests on `method: 'store'`; the probe environment is
+  isolated from the host's real PowerShell so the gate is reproducible with PowerShell 7 installed.
+
 ## 0.13.4 — configure-it guidance, manual Store steps, VPN preflight
 
 Two gaps from the 2026-10-27 run: the blocked `pwsh` call mentioned install and disable but not the
