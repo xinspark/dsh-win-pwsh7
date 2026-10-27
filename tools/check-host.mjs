@@ -172,7 +172,7 @@ function makeContext({ rows = [], versions = {}, deferred = false, jobs = false,
         const encodedIndex = argv.indexOf('-EncodedCommand')
         const encoded = encodedIndex >= 0 ? argv[encodedIndex + 1] ?? '' : ''
         const decoded = encoded === '' ? '' : Buffer.from(encoded, 'base64').toString('utf16le')
-        const isStoreUi = decoded.includes('STORE_UI') || decoded.includes('ms-windows-store://')
+        const isStoreUi = argv.includes('-File') || decoded.includes('STORE_UI') || decoded.includes('ms-windows-store://')
         const isNetworkProbe = /WindowsPowerShell[\\/]v1\.0[\\/]powershell\.exe$/iu.test(argv[0])
         const version = isWinget ? undefined : versions[argv[0]]
         let exitCode = 0
@@ -548,7 +548,7 @@ if (existsSync(MSI)) {
   check('install path: the report offers install, configure and disable, and no other installer', () => {
     assert.match(fallback.report, /Three ways forward/u)
     assert.match(fallback.report, /Install PowerShell 7 from the Microsoft Store/u)
-    assert.match(fallback.report, /winget install --id 9MZ1SNWT0N5D --source msstore/u)
+    assert.ok(!/winget install/u.test(fallback.report), 'only script/manual installs may be offered')
     assert.match(fallback.report, /Win\+R/u)
     assert.match(fallback.report, /pwsh-sandbox\.pwshPath/u)
     assert.match(fallback.report, /Disable this plugin/u)

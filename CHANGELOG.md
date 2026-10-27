@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.15.1 — the Store script survives 5.1 encoding, and only two install paths
+
+The 0.15.0 Store-UI script failed before opening the page with a parser error, not a VPN problem:
+Windows PowerShell 5.1 decoded the inline text in the host's ANSI code page, and characters inside
+the Chinese notice string became illegal tokens.
+
+- **The script is a UTF-8 BOM file, not inline text.** `spawnStoreUi` writes it to a temporary
+  `.ps1` with a BOM and launches `powershell.exe -File`; 5.1 reads BOM-prefixed files as UTF-8
+  regardless of the console code page. The temporary directory is removed when the job settles.
+- **Smart quotes are gone.** The Store notice uses 「安装」/「取消」 instead of curly quotes, which
+  PowerShell 7 itself treats as string delimiters. The generated script now parses under both
+  Windows PowerShell 5.1 and PowerShell 7.
+- **Only two install paths are exposed.** The `pwsh7_install` schema no longer has a `method`
+  parameter and the status/report text no longer offers a winget command: the tool is the script
+  install (open Store, notice, click Install), and the other path is manual Win+R. The manual
+  instructions remain in every report and failure message.
+- **Tests.** The host gate still drives the Store-UI click/failure jobs and no longer expects a
+  winget command in the report.
+
 ## 0.15.0 — VPN confirmation, Store notice, no metered probe, no context injection
 
 The 2026-10-27 run exposed three usability gaps around the Store-UI install and one unnecessary

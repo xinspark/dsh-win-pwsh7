@@ -16,7 +16,7 @@
 
 - 判定读执行器自己的 `ctx.shell.pwshPath`，不是扫配置行；`overridePath` 只影响探测与推荐，**不接线**。
 - 安装前不再做计量/网络探测；第一次调用 `pwsh7_install` 会先让模型询问用户是否开着 VPN，用户确认关闭后传 `vpnOffConfirmed: true` 才启动。
-- 默认 `store-ui`：打开 Microsoft Store 的 PowerShell 7 页面，先用一个说明框提醒「不要关闭商店窗口；VPN 开启请取消」，再用 Windows UI Automation 点「安装」/「获取」；页面 90 秒内没出现安装按钮时，提示用户关闭 VPN、完全重启 Store 后重试，或 Win+R 手动打开同一个 Store 链接。`method: 'store'` 仍可走 winget 后台安装。
+- 只提供两种安装方式：**脚本安装**（`pwsh7_install`，打开 Microsoft Store 的 PowerShell 7 页面，先弹说明框，再用 UI Automation 点「安装」/「获取」）和**手动安装**（Win+R 打开同一个 Store 链接）。页面 90 秒内没出现安装按钮时，提示用户关闭 VPN、完全重启 Store 后重试。
 - 安装成功后先尝试刷新执行器缓存的 `pwshPath`；失败时才给「pin + 重载」的精确指引。
 - 自动安装失败时会翻译 Store 错误码，并指向「Store 已排队（暂停→恢复）」与手动 Store 链接，手动安装同样会被自动识别、无需 pin。
 - 自动安装可能一直停在 Store「排队中」：安装提示、进度行和失败文案都会给出「暂停→恢复」、关闭 VPN 并完全重启 Microsoft Store、以及手动 Store 链接；安装作业请用 **30 秒一轮**的 `job_output(wait:true, timeout_ms=30000)` + `job_list` 轮询，`wait aborted` 不是安装失败。状态不再注入模型上下文。

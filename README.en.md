@@ -39,13 +39,12 @@ Disabling the plugin restores the default runtime; the plugin still never writes
 - Manual install is spelled out: press Win+R, paste
   `ms-windows-store://pdp/?ProductId=9MZ1SNWT0N5D`, press Enter, click Install. A manual install is
   detected automatically; no pin is needed.
-- `store-ui` is the default install method: it shows an explicit notice (do not close the Store
-  window; cancel if a VPN is on), opens that Store page, and invokes its localized Install button
-  with Windows UI Automation. If no Install button appears in 90 seconds, it asks the user to
-  disconnect any VPN, fully quit and restart Microsoft Store, then retry (or use the Win+R path).
-  `method: 'store'` keeps the winget background install.
-- There is no metered/network preflight anymore: the Store-UI path is the manual Store page, and
-  the winget method no longer probes the connection. winget is only required for `method: 'store'`.
+- `store-ui` is the script install: it shows an explicit notice (do not close the Store window;
+  cancel if a VPN is on), opens that Store page, and invokes its localized Install button with
+  Windows UI Automation. If no Install button appears in 90 seconds, it asks the user to disconnect
+  any VPN, fully quit and restart Microsoft Store, then retry (or use the manual Win+R path). These
+  are the only two install paths: script install and manual install.
+- There is no metered/network preflight anymore: the Store-UI path is the manual Store page.
 - When the gate blocks, the answer has three paths: **configure** an installed PowerShell 7
   (`pwsh7_status` prints the `pwsh-sandbox.pwshPath` patch and reload), **install** (auto or
   manual), or disable the plugin.

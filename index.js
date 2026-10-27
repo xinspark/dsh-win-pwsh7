@@ -45,8 +45,9 @@
  * @module dsh-win-pwsh7
  */
 
-import { lstatSync, readFileSync, readdirSync, statSync } from 'node:fs'
+import { lstatSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
+import { tmpdir } from 'node:os'
 import { Service } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { resolvePwshPath } from '@deepseek-ai/dsh-pwsh-local'
@@ -234,7 +235,7 @@ Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
 try {
   Add-Type -AssemblyName System.Windows.Forms
-  $noticeText = "dsh-win-pwsh7 即将打开 Microsoft Store，并自动点击 PowerShell 7 的“安装”。" + [Environment]::NewLine + [Environment]::NewLine + "请不要关闭弹出的商店窗口；关闭会导致安装中断。" + [Environment]::NewLine + [Environment]::NewLine + "如果当前开启了 VPN，请先点“取消”，断开 VPN、完全退出并重启 Microsoft Store 后重试。"
+  $noticeText = "dsh-win-pwsh7 即将打开 Microsoft Store，并自动点击 PowerShell 7 的「安装」。" + [Environment]::NewLine + [Environment]::NewLine + "请不要关闭弹出的商店窗口；关闭会导致安装中断。" + [Environment]::NewLine + [Environment]::NewLine + "如果当前开启了 VPN，请先点「取消」，断开 VPN、完全退出并重启 Microsoft Store 后重试。"
   $notice = [System.Windows.Forms.MessageBox]::Show(
     $noticeText,
     "dsh-win-pwsh7",
@@ -446,23 +447,16 @@ export function apply(ctx, config) {
         name: 'pwsh7_install',
         description:
           'Install PowerShell 7 from the Microsoft Store and return a background job id at once: read progress ' +
-          'with job_output, stop it with job_kill. Two methods: store-ui (default) opens the Microsoft Store ' +
-          'product page and clicks Install with Windows UI Automation — the same page and button a human would ' +
-          'use; store runs winget in the background. If the Store page does not load within about 90 seconds, ' +
-          'the report asks the user to disconnect any VPN and fully restart Microsoft Store, then retry or use ' +
-          'the manual Win+R path. Before it starts, the user must confirm that no VPN is active (pass ' +
-          'vpnOffConfirmed: true); a Store window will open with an explicit notice and must stay open until ' +
-          'the install starts. Only run it when the user explicitly asks to install PowerShell 7. The Store ' +
-          'is the plugin\'s only install path: Windows keeps that package up to date by itself, and there is no ' +
-          'second installer. It needs Microsoft Store and network, and never uninstalls anything.',
+          'with job_output, stop it with job_kill. It opens the Microsoft Store product page and clicks Install ' +
+          'with Windows UI Automation — the same page and button a human would use. If the Store page does not ' +
+          'load within about 90 seconds, the report asks the user to disconnect any VPN and fully restart ' +
+          'Microsoft Store, then retry or use the manual Win+R path. Before it starts, the user must confirm that ' +
+          'no VPN is active (pass vpnOffConfirmed: true); a Store window will open with an explicit notice and ' +
+          'must stay open until the install starts. Only run it when the user explicitly asks to install ' +
+          'PowerShell 7. The Store is the plugin\'s only install path: Windows keeps that package up to date by ' +
+          'itself, and there is no second installer. It needs Microsoft Store and network, and never uninstalls ' +
+          'anything.',
         parameters: {
-          method: {
-            type: 'string',
-            enum: ['store-ui', 'store'],
-            description:
-              'store-ui (default) opens the Microsoft Store page for PowerShell 7 and invokes its Install button ' +
-              'with UI Automation; store runs winget install --source msstore in the background.',
-          },
           vpnOffConfirmed: {
             type: 'boolean',
             description:
@@ -984,8 +978,8 @@ async function renderStatus(ctx, config, options = {}) {
     }
   }
   lines.push('Three ways forward:')
-  lines.push('  1. Install PowerShell 7 from the Microsoft Store — ask for pwsh7_install (this plugin runs it),')
-  lines.push(`     or run it yourself: ${STORE_COMMAND}`)
+  lines.push('  1. Install PowerShell 7 from the Microsoft Store — ask for pwsh7_install (this plugin opens the')
+  lines.push('     Store page and clicks Install); or choose the manual path below.')
   lines.push(`     Manual install: ${MANUAL_STORE_STEPS}.`)
   lines.push('     A Microsoft Store window will open and must stay open while the script clicks Install;')
   lines.push('     a manual Store install is detected automatically, with no pwshPath pin needed.')
@@ -1098,20 +1092,43 @@ async function runInstall(ctx, config, exec, options = {}) {
   ].join('\n')
 }
 
-/** Spawn the Store-page UI automation script through Windows PowerShell 5.1. */
+/**
+ * Spawn the Store-page UI automation script through Windows PowerShell 5.1.
+ *
+ * The script is written to a temporary `.ps1` with a UTF-8 BOM. Passing it through `-EncodedCommand`
+ * was not reliable here: the 5.1 host decoded the text as ANSI on the tested machine and the Chinese
+ * strings turned into parser errors. A BOM-prefixed file is read as UTF-8 by 5.1 regardless of the
+ * console code page, so the notice text and the localized Install labels stay intact.
+ */
 function spawnStoreUi(ctx) {
   const executable = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
-  const encoded = Buffer.from(STORE_UI_SCRIPT, 'utf16le').toString('base64')
-  return ctx.subprocess.spawn({
-    argv: [executable, '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded],
-    cwd: process.cwd(),
-    stdio: {
-      stdin: 'ignore',
-      stdout: { maxBytes: PROBE_MAX_BYTES },
-      stderr: { maxBytes: PROBE_MAX_BYTES },
-    },
-    graceMs: STORE_UI_LOAD_TIMEOUT_MS + 30000,
-  })
+  const directory = mkdtempSync(join(tmpdir(), 'dsh-win-pwsh7-store-ui-'))
+  const scriptPath = join(directory, 'install.ps1')
+  writeFileSync(scriptPath, `\uFEFF${STORE_UI_SCRIPT}`, 'utf8')
+  try {
+    const handle = ctx.subprocess.spawn({
+      argv: [executable, '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', scriptPath],
+      cwd: process.cwd(),
+      stdio: {
+        stdin: 'ignore',
+        stdout: { maxBytes: PROBE_MAX_BYTES },
+        stderr: { maxBytes: PROBE_MAX_BYTES },
+      },
+      graceMs: STORE_UI_LOAD_TIMEOUT_MS + 30000,
+    })
+    handle.storeUiDirectory = directory
+    return handle
+  } catch (error) {
+    rmSync(directory, { recursive: true, force: true })
+    throw error
+  }
+}
+
+/** Remove the temporary script directory once the job has settled. */
+function cleanupStoreUi(handle) {
+  try {
+    if (handle?.storeUiDirectory !== undefined) rmSync(handle.storeUiDirectory, { recursive: true, force: true })
+  } catch { /* best effort */ }
 }
 
 /**
@@ -1154,6 +1171,7 @@ function storeUiJobSpec(ctx, config, exec) {
         done: (async () => {
           try {
             const outcome = await handle.done
+            cleanupStoreUi(handle)
             clearInterval(timer)
             if (cancelled) {
               const detail = 'the Store UI install was cancelled'
@@ -1220,6 +1238,7 @@ async function startStoreUiInstall(ctx, config, exec) {
       return `Could not open Microsoft Store: ${describe(error)}. Manual install: ${MANUAL_STORE_STEPS}.`
     }
     const outcome = await handle.done
+    cleanupStoreUi(handle)
     const clicked = /STORE_UI_CLICKED(?:_LEGACY)?:/u.test(handle.collected?.stdout?.readFrom(0).text ?? '')
     if (!clicked) {
       return [
