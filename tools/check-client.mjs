@@ -324,6 +324,28 @@ check('the Remote flow mounts the namespace, calls the endpoint and renders its 
     `the report never reached the section: ${readyTexts.join(' | ').slice(0, 200)}`)
 })
 
+// A failure report can carry both the network cause and a pasteable patch. The section has to
+// expose both without making the user copy the prose by hand.
+remoteAnswer = () => Promise.resolve({ ok: true, value: { report: [
+  'PowerShell 7: not usable — no PowerShell 7 installation was found.',
+  '',
+  '- id: pwsh-sandbox',
+  '  config:',
+  "    pwshPath: 'C:\\\\Tools\\\\pwsh.exe'",
+  '',
+  'Network: "FixtureNet" — marked as metered (Fixed); Microsoft Store installs are deferred.',
+].join('\n') } })
+remoteButton.props.onClick()
+await new Promise((resolve) => setTimeout(resolve, 0))
+const fixTexts = textsOf(remoteSection({ subject: { pkg: 'dsh-win-pwsh7' } }))
+
+check('the diagnostics section exposes the network cause and a copyable patch', () => {
+  assert.ok(fixTexts.includes(dictionaries.zh.network_metered), 'no network line for a metered report')
+  assert.ok(fixTexts.includes(dictionaries.zh.patch_note), 'no guidance above the patch')
+  assert.ok(fixTexts.includes(dictionaries.zh.copy_patch), 'no copy-patch button')
+  assert.ok(fixTexts.some((text) => text.includes('pwshPath')), 'the patch text is missing')
+})
+
 remoteAnswer = () => Promise.resolve({ ok: false, error: { code: 'E-NOT-AVAILABLE', message: 'not mounted' } })
 remoteButton.props.onClick()
 await new Promise((resolve) => setTimeout(resolve, 0))

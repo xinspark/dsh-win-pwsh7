@@ -80,7 +80,7 @@ window.__ModuleLoader__.load({
       card_title: 'Configuration',
       field_overridePath: 'Explicit path (overridePath)',
       field_installIfMissing: 'Install when missing (installIfMissing)',
-      overridePath_hint: 'Priority ① explicit pwsh.exe path. Empty = auto-detect. It must spawn and report PowerShell 7 or newer; the Store family alias is accepted, while a version-numbered Store path is never pinned.',
+      overridePath_hint: 'Priority ① explicit pwsh.exe path. Empty = auto-detect. It must spawn and report PowerShell 7 or newer; the Store family alias is accepted, while a version-numbered Store path is never pinned. This only changes what the plugin probes and recommends — it does not wire the pwsh tool. Use the patch in the status section for that.',
       installIfMissing_hint: 'When nothing usable exists, install the self-updating Microsoft Store package through winget at startup. Default off.',
       save: 'Save',
       reset: 'Reset',
@@ -91,6 +91,11 @@ window.__ModuleLoader__.load({
       unwritable: 'The Host is not accepting writes for this row.',
       error_remote_unavailable: 'the Remote service is not available in this deployment',
       error_endpoint_missing: 'the status endpoint is not mounted',
+      network_metered: 'Network: metered — turn off "Metered connection" for this network, then Re-detect.',
+      copy_patch: 'Copy patch',
+      copied: 'Copied',
+      copy_failed: 'Copy failed — select the patch text and copy it manually.',
+      patch_note: 'Paste this into the profile patch and restart DSH. The config block replaces the row wholesale.',
     }
     const DICT_ZH = {
       diagnostics_title: 'PowerShell 7 状态',
@@ -103,7 +108,7 @@ window.__ModuleLoader__.load({
       card_title: '配置',
       field_overridePath: '指定路径（overridePath）',
       field_installIfMissing: '缺失时安装（installIfMissing）',
-      overridePath_hint: '优先级①的显式 pwsh.exe 路径。留空 = 自动探测。必须能启动并报告 PowerShell 7 及以上；Store 家族别名可用，版本号目录永不被 pin。',
+      overridePath_hint: '优先级①的显式 pwsh.exe 路径。留空 = 自动探测。必须能启动并报告 PowerShell 7 及以上；Store 家族别名可用，版本号目录永不被 pin。这里只影响插件的探测与推荐，不会给 pwsh 工具接线；接线请用状态区里的补丁。',
       installIfMissing_hint: '本机没有可用 PowerShell 7 时，启动期经 winget 安装商店版（随 Windows 自更新）。默认关闭。',
       save: '保存',
       reset: '重置',
@@ -114,6 +119,11 @@ window.__ModuleLoader__.load({
       unwritable: 'Host 当前不接受该行的写入。',
       error_remote_unavailable: '本部署没有可用的 Remote 服务',
       error_endpoint_missing: '状态端点未挂载',
+      network_metered: '网络：计量连接——关闭该网络的「按流量计费的连接」后重新检测。',
+      copy_patch: '复制补丁',
+      copied: '已复制',
+      copy_failed: '复制失败——请手动选中补丁文本复制。',
+      patch_note: '把这段粘贴进 profile 补丁并重启 DSH；config 会整体替换该行的配置。',
     }
 
     const CSS_CARD = `
@@ -150,6 +160,11 @@ window.__ModuleLoader__.load({
 .dw7-diag-report{margin:0;padding:12px;background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l1);border-radius:6px;color:var(--dsw-alias-label-primary);font-size:12px;line-height:1.55;white-space:pre-wrap;word-break:break-all;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;max-height:320px;overflow:auto;}
 .dw7-diag-err{color:var(--dsw-alias-state-error-primary);font-size:12px;}
 .dw7-diag-idle{color:var(--dsw-alias-label-secondary);font-size:12px;}
+.dw7-diag-net{color:var(--dsw-alias-label-primary);font-size:12px;line-height:1.5;border-left:3px solid var(--dsw-alias-state-error-primary);padding-left:8px;}
+.dw7-diag-fix{display:flex;flex-direction:column;gap:6px;padding:10px;background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l1);border-radius:6px;min-width:0;}
+.dw7-diag-fix-title{color:var(--dsw-alias-label-secondary);font-size:12px;line-height:1.5;}
+.dw7-diag-patch{margin:0;padding:10px;background:var(--dsw-alias-bg-layer-1);border:1px solid var(--dsw-alias-border-l1);border-radius:4px;color:var(--dsw-alias-label-primary);font-size:12px;line-height:1.5;white-space:pre-wrap;word-break:break-all;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;max-height:180px;overflow:auto;}
+.dw7-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
 /* The Re-detect button belongs to this section's slot group, and the page it renders on may never
    render the configure card — so the button rules are defined here as well as in CSS_CARD, because
    a style element only applies while it is mounted. */
@@ -237,22 +252,55 @@ window.__ModuleLoader__.load({
           return '' // the idle line below carries this message, once
         }
 
+        /** The profile patch a report carries, when it offers one, without the prose around it. */
+        function patchFromReport(report) {
+          if (typeof report !== 'string') return null
+          const start = report.indexOf('- id: pwsh-sandbox')
+          if (start < 0) return null
+          const end = report.indexOf('\n\n', start)
+          return report.slice(start, end < 0 ? undefined : end).trimEnd()
+        }
+
         function DiagnosticsSection(props) {
           const pkg = props?.subject?.pkg
           const active = pkg === PACKAGE || pkg?.name === PACKAGE
           const snap = useSyncExternalStore(diagnostics.subscribe, diagnostics.get)
+          const [copied, setCopied] = useState(false)
+          const [copyNote, setCopyNote] = useState(null)
           useEffect(() => {
             if (active) void refresh()
             // eslint-disable-next-line react-hooks/exhaustive-deps
           }, [active])
           if (!active) return null
           const body = bodyFor(snap, t)
+          const report = typeof snap.report === 'string' ? snap.report : ''
+          const patch = patchFromReport(report)
+          const metered = /Metered connection|marked as metered/u.test(report)
+          async function copyPatch() {
+            try {
+              if (globalThis.navigator?.clipboard?.writeText === undefined) throw new Error('clipboard unavailable')
+              await globalThis.navigator.clipboard.writeText(patch)
+              setCopied(true)
+              setCopyNote(null)
+            } catch {
+              setCopyNote(t('copy_failed'))
+            }
+          }
           return h('section', { className: 'dw7-diag' },
             h('style', null, CSS_DIAG),
             h('div', { className: 'dw7-diag-head' },
               h('span', { className: 'dw7-diag-title' }, t('diagnostics_title')),
               snap.at ? h('span', { className: 'dw7-diag-at' }, t('refreshed_at', { at: snap.at })) : null),
             h('pre', { className: 'dw7-diag-report' }, body),
+            metered ? h('div', { className: 'dw7-diag-net' }, t('network_metered')) : null,
+            patch !== null
+              ? h('div', { className: 'dw7-diag-fix' },
+                h('div', { className: 'dw7-diag-fix-title' }, t('patch_note')),
+                h('pre', { className: 'dw7-diag-patch' }, patch),
+                h('div', { className: 'dw7-actions' },
+                  h('button', { className: 'dw7-btn dw7-btn-ghost', onClick: () => void copyPatch() }, copied ? t('copied') : t('copy_patch')),
+                  copyNote ? h('span', { className: 'dw7-note' }, copyNote) : null))
+              : null,
             snap.error !== null && snap.report ? h('div', { className: 'dw7-diag-err' }, t('status_error', { error: snap.error })) : null,
             snap.report === null && snap.error === null && snap.state !== 'loading' ? h('div', { className: 'dw7-diag-idle' }, t('status_empty')) : null,
           )
