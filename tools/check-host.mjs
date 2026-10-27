@@ -92,11 +92,16 @@ function makeContext({ rows = [], versions = {}, deferred = false, jobs = false,
   const guards = []
   const listeners = new Map()
   /** Mutable so a test can make winget exit non-zero, as the Store route does. */
-  const state = { wingetExit: 0 }
+  const state = { wingetExit: 0, wingetStdout: 'Started MSStore package execution. ProductId: 9MZ1SNWT0N5D\r\n' }
   const ctx = {
     // Loud on purpose: `apply` catches its own registration failures and warns, so a silent logger
     // here would turn a broken plugin into an empty tool map three checks later.
-    logger: { info() {}, warn: (...args) => console.error('[host warn]', ...args) },
+    logger: {
+      info() {},
+      // Format `%s` like the Host does, so the warning text cannot leak the placeholder into the
+      // gate's own output (OBS-01 in the 2026-10-27 report).
+      warn: (first, ...rest) => console.error('[host warn]', String(first).replace(/%s/gu, () => String(rest.shift() ?? ''))),
+    },
     effect(fn) {
       fn()
       return () => {}
@@ -156,7 +161,7 @@ function makeContext({ rows = [], versions = {}, deferred = false, jobs = false,
         let stdout = ''
         if (isWinget) {
           exitCode = state.wingetExit
-          stdout = 'Started MSStore package execution. ProductId: 9MZ1SNWT0N5D\r\n'
+          stdout = state.wingetStdout
         } else if (isNetworkProbe && version === undefined) {
           // The install preflight reads the same WinRT cost the Store does. Default to an
           // unrestricted fixture; a test that needs a metered/unreadable cost sets `network`
@@ -627,8 +632,10 @@ if (existsSync(MSI)) {
     assert.match(jobOutcome.result, /PowerShell 7\.6\.6/u)
     assert.match(jobStub.appended.join('\n'), /is now in place/u, 'the verdict must land in the job output ring')
   })
-  check('install job: progress is reported, and a stalled Store run names the metered connection', () => {
-    assert.match(jobStub.progress[0], /metered connection/u)
+  check('install job: progress is reported, and a stalled Store run names both possibilities', () => {
+    assert.match(jobStub.progress[0], /Store may be queued/u)
+    assert.match(jobStub.progress[0], /pause and resume/u)
+    assert.match(jobStub.progress[0], /metered/u)
     assert.match(jobStub.progress[0], /job_kill/u)
     assert.match(runningStub.progress[0], /^running \d+m$/u)
   })
@@ -667,8 +674,9 @@ if (existsSync(MSI)) {
       `no re-check line: ${lyingStub.progress.join(' | ')}`)
   })
 
-  // And when nothing lands, the verdict must say so — and name the real cause: the measured run
-  // was gated by a metered connection, not by a broken Store — and offer the second path too.
+  // And when nothing lands, the verdict must name the real cause. The measured failures happened
+  // on a non-metered connection and were Store-handoff failures, so the text must not keep blaming
+  // metering; it must offer the Store queue recovery and the manual fallback.
   const storeRouteMachine = makeContext({ rows: [executorRow(undefined)], versions: {}, deferred: true, jobs: true })
   storeRouteMachine.state.wingetExit = 1
   apply(storeRouteMachine.ctx, {})
@@ -682,11 +690,31 @@ if (existsSync(MSI)) {
   storeRouteMachine.settleAll()
   const storeOutcome = await storeHooks.done
 
-  check('install job: a failed install explains the metered connection and names the second path', () => {
+  check('install job: a non-metered failure points at the Store queue and the manual fallback', () => {
     assert.equal(storeOutcome.status, 'failed')
-    assert.match(storeOutcome.result, /metered/u)
-    assert.match(storeOutcome.result, /Metered connection/u)
-    assert.match(storeOutcome.result, /disable this plugin/u)
+    assert.ok(!/Turn "Metered connection" off/u.test(storeOutcome.result), `a non-metered failure gave metering advice: ${storeOutcome.result}`)
+    assert.ok(!/marked as metered/u.test(storeOutcome.result))
+    assert.match(storeOutcome.result, /pause and resume/u)
+    assert.match(storeOutcome.result, /ms-windows-store:\/\/pdp/u)
+    assert.match(storeOutcome.result, /no pwshPath pin/u)
+  })
+
+  // The 0x80d03801 shape from the 2026-10-27 report: the verdict must translate the code and keep
+  // the manual Store path, rather than printing only the raw winget tail.
+  const codeMachine = makeContext({ rows: [executorRow(undefined)], versions: {}, deferred: true, jobs: true })
+  codeMachine.state.wingetExit = 1
+  codeMachine.state.wingetStdout = 'Started MSStore package execution. ProductId: 9MZ1SNWT0N5D\r\n无法安装或更新 Microsoft Store 程序包。错误代码: 0x80d03801\r\n'
+  apply(codeMachine.ctx, {})
+  await codeMachine.registered.get('pwsh7_install').execute({}, undefined)
+  const codeStub = { progress: [], appended: [], updateProgress(line) { this.progress.push(line) }, append(text) { this.appended.push(text) } }
+  const codeHooks = codeMachine.jobSpecs[0].run(codeStub)
+  codeMachine.settleAll()
+  const codeOutcome = await codeHooks.done
+  check('install job: 0x80d03801 is translated and keeps the manual Store path', () => {
+    assert.match(codeOutcome.result, /0x80D03801/u)
+    assert.match(codeOutcome.result, /Store download\/deployment/u)
+    assert.match(codeOutcome.result, /ms-windows-store:\/\/pdp/u)
+    assert.ok(!/Turn "Metered connection" off/u.test(codeOutcome.result), `a Store handoff failure gave metering advice: ${codeOutcome.result}`)
   })
 
   // The one probe that turns "the Store just sits there" into a named cause. The stub answers the

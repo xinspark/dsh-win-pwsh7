@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.13.2 — the Store handoff is named correctly
+
+The 2026-10-27 work-exp reports showed the automatic install failing on a **non-metered**
+connection while the plugin still told the user to turn metering off. The failure path now re-reads
+the connection, translates the Store error codes, and offers the recovery that actually worked:
+the Store entry was parked in "Queued", and pause → resume started the download.
+
+- **Failure attribution re-reads the connection.** `installVerdict` calls `networkCost` again;
+  metered advice appears only for `Fixed` / `Variable`. An unreadable cost is explicitly not
+  attributed to metering.
+- **Store error codes are translated.** `wingetFailureCode` normalizes decimal exit codes to
+  `0x…`, and `describeWingetFailure` explains `0x80D03801` (download/deployment), `0x80004004`
+  (E_ABORT) and `0x80072EFD` (WinHTTP 12029).
+- **Non-metered failures point at the queue and the manual fallback.** The verdict says to open
+  Microsoft Store → Downloads/Library, pause and resume a "Queued" PowerShell entry, check Windows
+  Update is not paused, and gives `ms-windows-store://pdp/?ProductId=9MZ1SNWT0N5D`. A manual Store
+  install is detected automatically — no `pwshPath` pin is needed.
+- **The handoff is visible in progress.** `Started MSStore package execution` is now a named phase;
+  after `DSH_WIN_PWSH7_STORE_QUEUE_HINT_MS` (default 2 minutes) the progress line says the entry may
+  be queued, and the stall line names both the queue and metering instead of only metering.
+- **The gate stub formats `%s`** (OBS-01), so the host gate no longer prints the placeholder.
+- **Tests.** A non-metered failure must not give metering advice; `0x80D03801` must be translated and
+  keep the manual Store path; the metered preflight still starts no job.
+
 ## 0.13.1 — install, then actually usable
 
 The 0.13.0 gate read the executor correctly but inherited the executor's own cache: `pwsh7_install`

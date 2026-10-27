@@ -234,6 +234,16 @@ const STORE_ARGS = [
 /** The same command as a line, for a user who would rather run it themselves. */
 const STORE_COMMAND = `winget ${STORE_ARGS.join(' ')}`
 
+/** The Store product page, for the manual fallback when winget's non-interactive handoff fails. */
+const STORE_PROTOCOL = `ms-windows-store://pdp/?ProductId=${STORE_PRODUCT_ID}`
+
+/**
+ * How long winget may sit after handing the install to the Microsoft Store before the progress line
+ * names the queue. The measured failure is a Store entry parked in "Queued" with the download not
+ * started; pause → resume in the Store starts it immediately. This is a hint, not a failure verdict.
+ */
+const STORE_QUEUE_HINT_MS = envMs('DSH_WIN_PWSH7_STORE_QUEUE_HINT_MS', 2 * 60 * 1000)
+
 /**
  * The second path, offered next to installing: if PowerShell 7 is not wanted on this machine, the
  * user can turn this plugin off. Saying so is part of the plugin's job — an agent that only knows
@@ -917,6 +927,7 @@ async function renderStatus(ctx, config, options = {}) {
   lines.push('Two ways forward:')
   lines.push('  1. Install PowerShell 7 from the Microsoft Store — ask for pwsh7_install (this plugin runs it),')
   lines.push(`     or run it yourself: ${STORE_COMMAND}`)
+  lines.push(`     Or open the Store page directly: ${STORE_PROTOCOL}`)
   lines.push('     It checks the connection first: Windows defers Store downloads on a connection marked as')
   lines.push('     metered, so turn "Metered connection" off for that network if this machine is metered.')
   for (const line of DISABLE_PATH) lines.push(line === DISABLE_PATH[0] ? `  2. ${line}` : `     ${line}`)
@@ -972,6 +983,7 @@ function installBlockedReport(pre) {
     return [
       'Install not started: winget was not found on PATH. Install "App Installer" from the Microsoft',
       `Store, or run it yourself after installing it: ${STORE_COMMAND}`,
+      `Manual Store page: ${STORE_PROTOCOL} — the plugin detects a manual Store install automatically.`,
     ].join(' ')
   }
   if (pre.code === 'metered') {
@@ -984,6 +996,7 @@ function installBlockedReport(pre) {
       'Then run pwsh7_install again; it re-checks and starts only after the connection reports Unrestricted.',
       'To verify the reading, run pwsh7_status; the metered warning disappears when the setting is off.',
       `If the probe keeps failing, run it manually: ${STORE_COMMAND}`,
+      `Or open the Store page: ${STORE_PROTOCOL} — the plugin detects a manual install automatically.`,
       'Do not switch to another installer — the Store package is the only path this plugin supports.',
     ].join(' ')
   }
@@ -992,6 +1005,7 @@ function installBlockedReport(pre) {
     'probe failed or returned Unknown). Check that the machine is online and that the active network\'s',
     '"Metered connection" switch is off, then retry. If the probe keeps failing, run it manually:',
     STORE_COMMAND,
+    `Or open the Store page: ${STORE_PROTOCOL} — the plugin detects a manual install automatically.`,
   ].join(' ')
 }
 
@@ -1053,6 +1067,26 @@ async function runInstall(ctx, config, exec) {
   ].join('\n')
 }
 
+/** The Store error code a winget tail carries, normalized to `0x…`, or `undefined`. */
+function wingetFailureCode(detail) {
+  const hex = /0x([0-9a-f]{8})\b/iu.exec(detail)
+  if (hex !== null) return `0x${hex[1].toUpperCase()}`
+  const decimal = /exited with code (\d{7,})/u.exec(detail)
+  if (decimal !== null) {
+    const value = Number(decimal[1])
+    if (Number.isSafeInteger(value) && value > 0) return `0x${value.toString(16).toUpperCase()}`
+  }
+  return undefined
+}
+
+/** What a Store error code points at, in the order a user can act on it. */
+function describeWingetFailure(code) {
+  if (code === '0x80D03801') return 'the Store download/deployment layer failed (the winget → Store handoff).'
+  if (code === '0x80004004') return 'the Store deployment was aborted (E_ABORT).'
+  if (code === '0x80072EFD') return 'the Store endpoint could not be reached (WinHTTP 12029); check proxy/VPN/DNS.'
+  return 'the Store reported this error.'
+}
+
 /**
  * The report lines for a finished install attempt; the inline path and the job settle share them.
  * @param ctx - the row's Host context.
@@ -1084,10 +1118,22 @@ async function installVerdict(ctx, config, result, after) {
     lines.push('restart DSH — or repin it at the version-stable path printed there.')
   } else {
     lines.push(`The install did not complete: ${result.detail}`)
-    lines.push('The machine still has no PowerShell 7 the executor can use. Its usual failure mode is not the')
-    lines.push('Store but the connection: on a connection marked as metered Windows defers the download and the')
-    lines.push('Store logs no error at all. Turn "Metered connection" off for that network and run this again,')
-    lines.push('or disable this plugin if PowerShell 7 is not wanted here.')
+    const network = await networkCost(ctx)
+    const metered = network !== undefined && METERED_COST.has(network.cost)
+    const code = wingetFailureCode(result.detail)
+    if (code !== undefined) lines.push(`${code}: ${describeWingetFailure(code)}`)
+    if (metered) {
+      lines.push('The active connection is still marked as metered, so Windows may be deferring the Store download.')
+      lines.push('Turn "Metered connection" off for that network and run this again. If the Store entry is already')
+      lines.push(`queued, pause and resume it there. Manual install after that: ${STORE_PROTOCOL}`)
+    } else {
+      lines.push(network === undefined
+        ? 'The connection cost could not be re-read, so this failure is not being attributed to metering.'
+        : 'The connection is not metered now, so the Store handoff — not the connection — is the likely weak link.')
+      lines.push('Open Microsoft Store → Downloads/Library. If the PowerShell entry says "Queued", pause and resume it;')
+      lines.push('also check that Windows Update is not paused and that the Store is signed in.')
+      lines.push(`A manual Store install works and is detected automatically — no pwshPath pin is needed: ${STORE_PROTOCOL}`)
+    }
   }
   return lines
 }
@@ -1123,7 +1169,7 @@ function installJobSpec(ctx, config, exec) {
         job.append(`${detail}\n`)
         return { cancel() {}, done: Promise.resolve({ status: 'failed', detail, result: detail }) }
       }
-      const logState = { file: undefined, offset: 0, phase: undefined, startedAt, totalAsked: false }
+      const logState = { file: undefined, offset: 0, phase: undefined, startedAt, totalAsked: false, storeHandedAt: undefined }
       let cancelled = false
       // "Stalled" means nothing has moved — no new log line, no byte of the installer — for the whole
       // threshold. Wall clock alone was wrong twice over: a long but *working* staging phase
@@ -1135,8 +1181,14 @@ function installJobSpec(ctx, config, exec) {
         measureDownload(logState, Date.now())
         const parts = [`running ${elapsed()}`]
         if (phase !== undefined) parts.push(phase)
+        const handed = phase !== undefined && phase.includes('handed to the Microsoft Store')
+        if (handed) logState.storeHandedAt ??= Date.now()
+        else logState.storeHandedAt = undefined
+        if (handed && Date.now() - logState.storeHandedAt >= STORE_QUEUE_HINT_MS) {
+          parts.push('the Store entry may be queued — open Microsoft Store → Downloads/Library, pause and resume it; also check Windows Update is not paused')
+        }
         if (stalled()) {
-          parts.push('nothing has moved for a while — on a metered connection the Store queues the download and logs no error; job_kill, then check that setting')
+          parts.push('nothing has moved for a while — the Store may be queued (open Microsoft Store → Downloads/Library, pause and resume), or the connection may be metered; job_kill, then check both')
         }
         const downloading = downloadProgress(logState)
         if (downloading !== undefined) parts.push(downloading)
@@ -1291,6 +1343,7 @@ function wingetPhase(line) {
     [/Downloading to path:/u, 'updating the winget source'],
     [/Packaged source open/u, 'winget source ready'],
     [/Installer hash verified/u, 'installer downloaded and verified'],
+    [/Started MSStore package execution/u, 'handed to the Microsoft Store (waiting for its queue to start the download)'],
     [/Starting StagePackageAsync/u, 'deploying the package (staging covers the download)'],
     [/Starting RegisterPackageByFullNameAsync/u, 'registering the package'],
     [/Leaf command succeeded/u, 'winget finished'],

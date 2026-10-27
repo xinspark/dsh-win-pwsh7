@@ -25,6 +25,10 @@ Disabling the plugin restores the default runtime; the plugin still never writes
   `overridePath` only changes probing and recommendations, **not executor wiring**.
 - After an install the plugin first nudges the executor's cached `pwshPath`; only when that cache
   is unavailable does it print the pin + reload instruction.
+- A failed automatic install no longer blames metering by default: it re-reads the connection,
+  translates the Store error code, and on a non-metered connection points at the Store queue
+  (pause → resume) and the manual Store page. A manual install is detected automatically; no pin
+  is needed.
 - The install preflight is mandatory: winget present, an active network, and a non-metered
   connection. Metered / `Unknown` / a failed probe / no winget **start no install job** and name
   the network and the setting to turn off.
