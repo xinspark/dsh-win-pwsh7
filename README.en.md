@@ -31,19 +31,20 @@ default executor then chooses the runtime itself, and the plugin still never wri
 
 ## Coexistence with dsh-ops
 
-On by default. When dsh-ops is installed, the plugin writes a marked `dsh-ops-compat` override into
-the active profile patch and enables dsh-ops Compatibility mode; after a DSH restart the native
-`pwsh` tool is back and `ops_bash` remains available.
+Off by default during the 0.2.2 transition. When enabled and dsh-ops is installed, the plugin
+writes a marked `dsh-ops-compat` override into the active profile patch and enables dsh-ops
+Compatibility mode; after a DSH restart the native `pwsh` tool is back and `ops_bash` remains
+available.
 
-The bridge also hides the official `read` / `glob` / `grep` tools while their OPS counterparts are
-visible, plus the duplicate official `bash` / `pwsh_persistent` shell, leaving `pwsh` + `ops_bash`.
-Turning the switch off removes only the block this plugin wrote; uninstall cleanup is best-effort
-and leaves at most a harmless compatibility row.
+The 0.2.1 bridge planned from the post-restriction visible set, which made it hide and restore the
+same tools in a loop and starved the Host main thread. 0.2.2 plans from the pre-restriction
+`knownNames` / `restrictableNames` and filters names `tools.restrict()` does not accept. The fix
+needs a real multi-session boot before this switch can become default-on again.
 
 ## Install this plugin
 
 ```powershell
-dsh plugin --profile desktop add github:XinSpark/dsh-win-pwsh7#v0.2.1
+dsh plugin --profile desktop add github:XinSpark/dsh-win-pwsh7#v0.2.2
 # or
 dsh plugin --profile desktop add dsh-win-pwsh7
 ```
@@ -81,7 +82,7 @@ The count lives in the current process and resets when DSH restarts.
 | Key | Default | Meaning |
 |---|---|---|
 | `overridePath` | unset | Priority ① explicit `pwsh.exe`. It must spawn and report PowerShell 7+; a failed validation falls back to auto-detection. **It only changes probing and recommendations, not executor wiring.** |
-| `dshOpsCompat` | `true` | Coexist with dsh-ops: writes and enables its Compatibility mode, hides duplicate official tools, and keeps `pwsh` + `ops_bash`. Requires a restart. |
+| `dshOpsCompat` | `false` | Coexist with dsh-ops (off by default in the 0.2.2 transition): writes and enables its Compatibility mode, hides duplicate official tools, and keeps `pwsh` + `ops_bash`. Requires a restart. |
 
 `overridePath` is `volatile()`: the plugin-page configuration section saves it live; it can also be
 set in the profile patch:
@@ -125,8 +126,8 @@ executor / disable the plugin.
 ## Plugin page
 
 The status section is a native card showing the state, runtime and executor path, with Re-detect
-at the top right; the configuration section exposes `overridePath` and the default-on
-"Keep native pwsh alongside dsh-ops" switch.
+at the top right; the configuration section exposes `overridePath` and the "Keep native pwsh
+alongside dsh-ops" switch (off by default during the 0.2.2 transition).
 
 ## Disable or uninstall
 

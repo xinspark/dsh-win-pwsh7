@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.2 — fix the dsh-ops bridge freeze
+
+- Fixed the 0.2.1 hide/unhide oscillation that could pin the Host main thread when many sessions
+  were restored. The bridge now plans from the host's **pre-restriction** `knownNames` /
+  `restrictableNames` instead of the post-restriction `visible` set, and filters the deny list to
+  names `tools.restrict()` actually accepts. The fallback path latches names it already hid.
+- Added regression checks for the stable plan, the older-host fallback, and the scope-local
+  `ops_bash` case that used to throw an unknown-global-tool warning.
+- Made `dshOpsCompat` opt-in (`false` by default) for 0.2.2. The bridge needs a real multi-session
+  boot before it is safe to turn back on by default; the profile keeps its explicit `false`.
+
 ## 0.2.1 — dsh-ops coexistence bridge
 
 - Added a default-on `dshOpsCompat` configuration row. When dsh-ops is installed, pwsh7 writes

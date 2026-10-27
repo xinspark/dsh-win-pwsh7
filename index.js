@@ -58,13 +58,13 @@ export const inject = ['subprocess', 'tools', 'configEditor', 'systemPrompt']
  * - id: win-pwsh7
  *   config:
  *     overridePath: 'D:\tools\pwsh\pwsh.exe'   # priority ① — validated, must be an ordinary PowerShell 7+
- *     dshOpsCompat: true                          # default; keeps pwsh beside dsh-ops ops_bash
+ *     dshOpsCompat: false                         # opt-in until the bridge is verified live
  */
 export const Config = z.object({
   overridePath: z.string().volatile(),
-  // Default-on coexistence with dsh-ops: pwsh7 keeps the native pwsh tool visible and
-  // re-hides the official file tools that dsh-ops compatibility would otherwise expose.
-  dshOpsCompat: z.boolean().default(true).volatile(),
+  // Opt-in for 0.2.2: the bridge froze the Host in 0.2.1, so it stays off until the fixed
+  // pre-restriction name source has been exercised on a real multi-session boot.
+  dshOpsCompat: z.boolean().default(false).volatile(),
 })
 
 /**
@@ -523,13 +523,13 @@ let hostContext = null
 function readRowConfig(ctx, fallback) {
   const merged = {
     overridePath: typeof fallback?.overridePath === 'string' ? fallback.overridePath : undefined,
-    dshOpsCompat: fallback?.dshOpsCompat !== false,
+    dshOpsCompat: fallback?.dshOpsCompat === true,
   }
   try {
     const entry = ctx.configEditor.entries().find((candidate) => candidate?.options?.name === 'dsh-win-pwsh7')
     const values = entry?.options?.config
     if (isSet(values?.overridePath)) merged.overridePath = String(values.overridePath)
-    if (values?.dshOpsCompat !== undefined) merged.dshOpsCompat = values.dshOpsCompat !== false
+    if (values?.dshOpsCompat !== undefined) merged.dshOpsCompat = values.dshOpsCompat === true
   } catch { /* fall back to the captured config */ }
   return merged
 }
@@ -601,6 +601,11 @@ function withoutCompatBlock(text) {
   return text.replace(/# dsh-win-pwsh7: dsh-ops compatibility \(managed\)\r?\n- id: dsh-ops-compat\r?\n  disabled: false\r?\n?/u, '')
 }
 
+/** Whether the user already owns a dsh-ops-compat override outside our markers. */
+function hasForeignCompatEntry(text) {
+  return /^\s*-\s*(?:\{\s*)?id:\s*['"]?dsh-ops-compat\b/mu.test(withoutCompatBlock(text))
+}
+
 /**
  * Ensure the profile patch contains the compatibility override when dsh-ops is present and
  * the switch is on; remove only our own block when it is off or dsh-ops is gone.
@@ -613,20 +618,21 @@ async function ensureDshOpsCompat(ctx, config) {
   if (directory === undefined) return { changed: false, state: 'no-profile' }
   const path = join(directory, 'cordis.patch.yml')
   const installed = await dshOpsInstalled(ctx)
-  const enabled = config?.dshOpsCompat !== false
+  const enabled = config?.dshOpsCompat === true
   if (!installed || !enabled) {
-    const changed = rewriteProfilePatch(path, (text) => withoutCompatBlock(text))
-    return { changed, state: installed ? 'disabled' : 'not-installed' }
+    return { changed: rewriteProfilePatch(path, (text) => withoutCompatBlock(text)), state: installed ? 'disabled' : 'not-installed' }
   }
   const changed = rewriteProfilePatch(path, (text) => {
+    // A user may already own a dsh-ops-compat override; never create a duplicate id or
+    // fight their explicit choice.
+    if (hasForeignCompatEntry(text)) return text
     if (text.includes(DSH_OPS_PATCH_MARKER)) return text
-    // A user may already own a dsh-ops-compat override; do not create a duplicate id.
-    if (/^\s*-\s*(?:\{\s*)?id:\s*['"]?dsh-ops-compat\b/mu.test(text)) return text
     // A profile patch that is exactly the empty flow list has no entries to keep; appending a
     // block sequence after `[]` would be invalid YAML.
-    const base = text.trim() === '[]' ? '' : text
-    const separator = base === '' || base.endsWith('\n') ? '' : '\n'
-    return `${base}${separator}${DSH_OPS_PATCH_BLOCK}`
+    const base = withoutCompatBlock(text)
+    const normalized = base.trim() === '[]' ? '' : base
+    const separator = normalized === '' || normalized.endsWith('\n') ? '' : '\n'
+    return `${normalized}${separator}${DSH_OPS_PATCH_BLOCK}`
   })
   return { changed, state: 'enabled' }
 }
@@ -644,31 +650,65 @@ function removeDshOpsCompatPatch(ctx) {
 }
 
 /**
- * The visible tool names of one agent, through the cheap view when the host offers it and
- * through the schema projection otherwise.
+ * The tool-name facts of one agent, read from the host's pre-restriction view when it is
+ * available.
+ *
+ * `visible` is POST-restriction: hiding read/glob/grep removes them from it, so the next
+ * reconcile pass no longer saw a counterpart pair, lifted the mask, saw the pair again, and
+ * restored it. Each flip emitted `tools/change`, which called this reconcile again — an
+ * endless hide/unhide loop that starved the Host main thread once many agents were created.
+ * `knownNames` / `restrictableNames` keep the pre-restriction facts and are also the only
+ * names `tools.restrict()` accepts, so the deny list is stable and valid.
  * @param tools - the tool registry.
  * @param agent - the agent scope.
- * @returns the visible name set, or an empty set when the surface cannot be read.
+ * @param previousDeny - names this bridge already hid, used to keep older hosts stable.
+ * @returns `{ names, restrictable }`, both empty when the surface cannot be read.
  */
-function visibleNameSet(tools, agent) {
+export function toolNameFacts(tools, agent, previousDeny = []) {
   try {
-    const visible = tools.view?.(agent)?.visible
-    if (visible !== undefined && typeof visible.keys === 'function') return new Set(visible.keys())
-    const schemas = tools.schemas?.(agent)
-    return new Set(Array.isArray(schemas) ? schemas.map((schema) => schema.name) : [])
+    const view = tools.view?.(agent)
+    const known = view?.knownNames
+    if (known !== undefined && typeof known.has === 'function') {
+      const restrictable = view?.restrictableNames
+      const facts = {
+        names: new Set(known),
+        restrictable: new Set(restrictable !== undefined && typeof restrictable.has === 'function' ? restrictable : known),
+      }
+      for (const name of previousDeny) {
+        facts.names.add(name)
+        facts.restrictable.add(name)
+      }
+      return facts
+    }
+    // Older hosts expose only the visible map or the schema projection. It is
+    // post-restriction, but unioning the names this bridge already hid keeps a
+    // hide/unhide loop from forming in the fallback path too.
+    const visible = view?.visible
+    let names
+    if (visible !== undefined && typeof visible.keys === 'function') {
+      names = new Set(visible.keys())
+    } else {
+      const schemas = tools.schemas?.(agent)
+      names = new Set(Array.isArray(schemas) ? schemas.map((schema) => schema.name) : [])
+    }
+    for (const name of previousDeny) names.add(name)
+    return { names, restrictable: new Set(names) }
   } catch {
-    return new Set()
+    return { names: new Set(), restrictable: new Set() }
   }
 }
 
 /**
  * The official tools this bridge re-hides when their OPS counterparts are visible. The
  * counterpart test is deliberate: without it the bridge would hide official tools on a
- * machine where dsh-ops is absent or Compatibility is off.
- * @param names - the agent's visible tool names.
+ * machine where dsh-ops is absent or Compatibility is off. Candidates are filtered to the
+ * names the host will actually accept in `tools.restrict()`, so a scope-local name such as
+ * a session-owned `ops_bash` can never make the whole mask throw.
+ * @param facts - the agent's stable tool-name facts.
  * @returns the official names to deny.
  */
-function bridgeDenyNames(names) {
+export function bridgeDenyNames(facts) {
+  const { names } = facts
   const deny = []
   if (names.has('ops_inspect_local_file') && names.has('read')) deny.push('read')
   if (names.has('ops_glob') && names.has('glob')) deny.push('glob')
@@ -679,7 +719,7 @@ function bridgeDenyNames(names) {
     // the ordinary `pwsh` and remove the persistent duplicate.
     if (names.has('pwsh') && names.has('pwsh_persistent')) deny.push('pwsh_persistent')
   }
-  return deny
+  return deny.filter((name) => facts.restrictable.has(name))
 }
 
 /**
@@ -712,7 +752,7 @@ function mountDshOpsBridge(ctx, current) {
     if (stopped || mutating) return
     mutating = true
     try {
-      const enabled = current()?.dshOpsCompat !== false
+      const enabled = current()?.dshOpsCompat === true
       if (!enabled) {
         for (const entry of entries.values()) lift(entry)
         entries.clear()
@@ -722,7 +762,7 @@ function mountDshOpsBridge(ctx, current) {
         if (!entries.has(agent)) entries.set(agent, { lifts: [], deny: [] })
       }
       for (const [agent, entry] of entries) {
-        const deny = bridgeDenyNames(visibleNameSet(tools, agent))
+        const deny = bridgeDenyNames(toolNameFacts(tools, agent, entry.deny))
         if (deny.length === entry.deny.length && deny.every((name) => entry.deny.includes(name))) continue
         lift(entry)
         if (deny.length === 0) continue

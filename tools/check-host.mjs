@@ -51,7 +51,7 @@ mkdirSync(join(gateHome, 'bin'), { recursive: true })
 process.env.LOCALAPPDATA = gateHome
 process.env.PATH = join(gateHome, 'bin')
 
-const { apply } = await import('../index.js')
+const { apply, bridgeDenyNames, toolNameFacts } = await import('../index.js')
 
 /** An ordinary executable that exists on every Windows machine; its version comes from the stub. */
 const ORDINARY = 'C:\\Windows\\System32\\cmd.exe'
@@ -663,7 +663,7 @@ const compatMachine = makeContext({
     },
   },
 })
-apply(compatMachine.ctx, {})
+apply(compatMachine.ctx, { dshOpsCompat: true })
 await new Promise((resolve) => setTimeout(resolve, 50))
 const compatWritten = readFileSync(compatPatchPath, 'utf8')
 check('dsh-ops coexistence writes a marked compatibility override', () => {
@@ -677,6 +677,14 @@ const compatRemoved = readFileSync(compatPatchPath, 'utf8')
 check('turning coexistence off removes only the managed override', () => {
   assert.ok(!compatRemoved.includes('dsh-win-pwsh7: dsh-ops compatibility'), 'the managed block survived')
   assert.ok(compatRemoved.includes('- id: keep-me'), 'the user patch entry was removed')
+})
+apply(compatMachine.ctx, { dshOpsCompat: true })
+await new Promise((resolve) => setTimeout(resolve, 50))
+const compatReenabled = readFileSync(compatPatchPath, 'utf8')
+check('turning coexistence back on restores the managed override', () => {
+  assert.match(compatReenabled, /dsh-win-pwsh7: dsh-ops compatibility \(managed\)/u)
+  assert.match(compatReenabled, /- id: dsh-ops-compat\n  disabled: false/u)
+  assert.ok(compatReenabled.includes('- id: keep-me'), 'the user patch entry was removed')
 })
 if (savedProfileDir === undefined) delete process.env.DSH_PROFILE_DIR
 else process.env.DSH_PROFILE_DIR = savedProfileDir
@@ -703,7 +711,7 @@ const bridgeMachine = makeContext({
     'bash', 'pwsh', 'pwsh_persistent', 'ops_bash',
   ],
 })
-apply(bridgeMachine.ctx, {})
+apply(bridgeMachine.ctx, { dshOpsCompat: true })
 check('dsh-ops bridge hides duplicate official tools but keeps pwsh', () => {
   const deny = bridgeDenies.at(-1) ?? []
   for (const name of ['read', 'glob', 'grep', 'bash', 'pwsh_persistent']) {
@@ -711,6 +719,46 @@ check('dsh-ops bridge hides duplicate official tools but keeps pwsh', () => {
   }
   assert.ok(!deny.includes('pwsh'), 'bridge hid the native pwsh tool')
   assert.ok(!deny.includes('ops_bash'), 'bridge hid ops_bash')
+})
+
+const bridgeNames = new Set([
+  'read', 'ops_inspect_local_file',
+  'glob', 'ops_glob',
+  'grep', 'ops_grep',
+  'bash', 'pwsh', 'pwsh_persistent', 'ops_bash',
+])
+const bridgeRestrictable = new Set([...bridgeNames].filter((name) => name !== 'ops_bash'))
+const bridgeTools = {
+  view() {
+    return { knownNames: bridgeNames, restrictableNames: bridgeRestrictable }
+  },
+}
+check('the bridge plans from pre-restriction names, so hiding cannot flip it', () => {
+  const first = bridgeDenyNames(toolNameFacts(bridgeTools, {}, []))
+  assert.deepEqual(first, ['read', 'glob', 'grep', 'bash', 'pwsh_persistent'])
+  // `visible` is now post-restriction; knownNames is unchanged, as the host's view guarantees.
+  const second = bridgeDenyNames(toolNameFacts(bridgeTools, {}, first))
+  assert.deepEqual(second, first)
+})
+
+check('the fallback view latches the names already hidden instead of oscillating', () => {
+  const visible = new Set(bridgeNames)
+  const fallbackTools = {
+    view() {
+      return { visible: new Map([...visible].map((name) => [name, {}])) }
+    },
+  }
+  const first = bridgeDenyNames(toolNameFacts(fallbackTools, {}, []))
+  for (const name of first) visible.delete(name)
+  const second = bridgeDenyNames(toolNameFacts(fallbackTools, {}, first))
+  assert.deepEqual(second, first)
+})
+
+check('a scope-local name cannot make the whole restriction plan throw', () => {
+  const facts = toolNameFacts(bridgeTools, {}, [])
+  const deny = bridgeDenyNames({ ...facts, restrictable: new Set([...bridgeRestrictable].filter((name) => name !== 'glob')) })
+  assert.ok(!deny.includes('glob'), 'a non-restrictable name survived the filter')
+  assert.ok(!deny.includes('ops_bash'), 'a scope-local counterpart was put in the deny list')
 })
 
 // --- The client half's policy copy must not drift (static; no browser needed) -------------
