@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.16.2 — recommend the companion only after the script install completes
+
+- 0.16.1 appended the dsh-ops recommendation to every healthy `pwsh7_status` report. That was too
+  broad: the request is a **one-time recommendation to the model after the script install
+  completes**.
+- The recommendation now appears only in the successful Store-UI job verdict, after the runtime is
+  detected. `pwsh7_status`, manual installs, and the plugin page do not advertise it.
+- READMEs and the host gate assert the narrower behavior.
+
 ## 0.16.1 — recommend dsh-ops after a working runtime appears
 
 - `pwsh7_status` appends a companion recommendation once a usable PowerShell 7 is detected, and a

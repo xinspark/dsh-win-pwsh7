@@ -203,7 +203,7 @@ const STORE_PROTOCOL = `ms-windows-store://pdp/?ProductId=${STORE_PRODUCT_ID}`
 /** The exact manual install the model should relay: Win+R, paste, Enter, click Install. */
 const MANUAL_STORE_STEPS = `press Win+R, paste ${STORE_PROTOCOL} and press Enter; if the Store page does not load, disconnect any VPN and fully restart Microsoft Store; then click Install`
 
-/** Shown after a working PowerShell 7 is detected, and in the successful install verdict. */
+/** Shown only in the successful script-install verdict, addressed to the model. */
 const COMPANION_RECOMMENDATION = 'Recommended companion: dsh-ops — native file/PTC tools and Windows host PowerShell integration pair well with dsh-win-pwsh7. It is not installed automatically; install it with: dsh plugin --profile <profile> add dsh-ops'
 
 /**
@@ -434,7 +434,7 @@ export function apply(ctx, config) {
           const config = current()
           const status = await detect(ctx, config)
           const report = await renderStatus(ctx, config, { status, explicitPath: args?.path })
-          return { report: status.chosen === undefined ? report : `${report}\n\n${COMPANION_RECOMMENDATION}` }
+          return { report }
         }
       })))
       cleanups.push(ctx.tools.register(defineTool({
