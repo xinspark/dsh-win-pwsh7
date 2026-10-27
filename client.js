@@ -79,9 +79,7 @@ window.__ModuleLoader__.load({
       redetecting: 'Detecting…',
       card_title: 'Configuration',
       field_overridePath: 'Explicit path (overridePath)',
-      field_installIfMissing: 'Install when missing (installIfMissing)',
       overridePath_hint: 'Priority ① explicit pwsh.exe path. Empty = auto-detect. It must spawn and report PowerShell 7 or newer; the Store family alias is accepted, while a version-numbered Store path is never pinned. This only changes what the plugin probes and recommends — it does not wire the pwsh tool. Use the patch in the status section for that.',
-      installIfMissing_hint: 'When nothing usable exists, install the self-updating Microsoft Store package through winget at startup. Default off.',
       save: 'Save',
       reset: 'Reset',
       saved: 'Saved {at}',
@@ -107,9 +105,7 @@ window.__ModuleLoader__.load({
       redetecting: '检测中…',
       card_title: '配置',
       field_overridePath: '指定路径（overridePath）',
-      field_installIfMissing: '缺失时安装（installIfMissing）',
       overridePath_hint: '优先级①的显式 pwsh.exe 路径。留空 = 自动探测。必须能启动并报告 PowerShell 7 及以上；Store 家族别名可用，版本号目录永不被 pin。这里只影响插件的探测与推荐，不会给 pwsh 工具接线；接线请用状态区里的补丁。',
-      installIfMissing_hint: '本机没有可用 PowerShell 7 时，启动期经 winget 安装商店版（随 Windows 自更新）。默认关闭。',
       save: '保存',
       reset: '重置',
       saved: '已保存 {at}',
@@ -328,10 +324,9 @@ window.__ModuleLoader__.load({
           const unavailable = snap.status === 'unavailable'
           const served = {
             overridePath: typeof snap.value?.overridePath === 'string' ? snap.value.overridePath : '',
-            installIfMissing: snap.value?.installIfMissing === true,
           }
           const values = draft ?? served
-          const dirty = draft !== null && (values.overridePath !== served.overridePath || values.installIfMissing !== served.installIfMissing)
+          const dirty = draft !== null && values.overridePath !== served.overridePath
           const editable = !loading && !unavailable && snap.writable !== false && !busy
 
           async function save() {
@@ -344,9 +339,6 @@ window.__ModuleLoader__.load({
                 if (served.overridePath !== '') ok = await form.unset('overridePath') && ok
               } else if (nextPath !== served.overridePath) {
                 ok = await form.set('overridePath', nextPath) && ok
-              }
-              if (values.installIfMissing !== served.installIfMissing) {
-                ok = await form.set('installIfMissing', values.installIfMissing) && ok
               }
               if (ok) {
                 setDraft(null)
@@ -379,27 +371,12 @@ window.__ModuleLoader__.load({
                       disabled: !editable,
                       placeholder: 'C:\\Program Files\\PowerShell\\7\\pwsh.exe',
                       onChange: (event) => {
-                        setDraft({ overridePath: event.target.value, installIfMissing: values.installIfMissing })
+                        setDraft({ overridePath: event.target.value })
                         setNote(null)
                         setSavedAt(null)
                       },
                     })),
                   h('span', { className: 'dw7-hint' }, t('overridePath_hint'))),
-                h('div', { className: 'dw7-field', key: 'installIfMissing' },
-                  h('div', { className: 'dw7-inputrow' },
-                    h('button', {
-                      className: 'dw7-switch',
-                      role: 'switch',
-                      'aria-checked': values.installIfMissing,
-                      disabled: !editable,
-                      onClick: () => {
-                        setDraft({ overridePath: values.overridePath, installIfMissing: !values.installIfMissing })
-                        setNote(null)
-                        setSavedAt(null)
-                      },
-                    }, h('span', { className: 'dw7-knob' })),
-                    h('label', { className: 'dw7-label' }, t('field_installIfMissing'))),
-                  h('span', { className: 'dw7-hint' }, t('installIfMissing_hint'))),
                 h('div', { className: 'dw7-actions', key: 'actions' },
                   h('button', {
                     className: 'dw7-btn',

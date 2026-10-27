@@ -683,8 +683,29 @@ if (existsSync(MSI)) {
   check('install: a Store page that does not load asks for VPN off and the manual path', () => {
     assert.equal(uiFailOutcome.status, 'failed')
     assert.match(uiFailOutcome.result, /Store page did not load/u)
-    assert.match(uiFailOutcome.result, /VPN/u)
+    assert.match(uiFailOutcome.result, /First ask the user/u)
     assert.match(uiFailOutcome.result, /Win\+R/u)
+  })
+
+  // Three consecutive failures open the breaker; the fourth call starts nothing and asks for an
+  // explicit user confirmation. Passing userConfirmedFixed resets the count and allows one retry.
+  for (let attempt = 1; attempt < 3; attempt += 1) {
+    await uiFailMachine.registered.get('pwsh7_install').execute({ method: 'store-ui', vpnOffConfirmed: true }, undefined)
+    const hooks = uiFailMachine.jobSpecs[attempt].run({ progress: [], appended: [], updateProgress() {}, append() {} })
+    uiFailMachine.settleAll()
+    await hooks.done
+  }
+  const breakerReport = (await uiFailMachine.registered.get('pwsh7_install').execute({ vpnOffConfirmed: true }, undefined)).report
+  check('install: 3 consecutive failures stop the next install and ask for confirmation', () => {
+    assert.equal(uiFailMachine.jobSpecs.length, 3, 'a fourth install job was started after 3 failures')
+    assert.match(breakerReport, /3 consecutive script installs/u)
+    assert.match(breakerReport, /userConfirmedFixed: true/u)
+    assert.match(breakerReport, /Win\+R/u)
+  })
+  const fixedReport = (await uiFailMachine.registered.get('pwsh7_install').execute({ vpnOffConfirmed: true, userConfirmedFixed: true }, undefined)).report
+  check('install: an explicit user-confirmed fix resets the breaker for one retry', () => {
+    assert.equal(uiFailMachine.jobSpecs.length, 4)
+    assert.match(fixedReport, /Opening Microsoft Store and clicking Install/u)
   })
   check('install job: kind, label, both output streams, and a runnable body', () => {
     assert.equal(spec.kind, 'pwsh7')
@@ -969,16 +990,14 @@ if (existsSync(MSI)) {
       'a disabled row was reported as the runtime')
   })
 
-  // `apply` does not await the sweep (`void activationSweep(...).then(...)`), so activation was never
-  // blocked by an install — the review's premise on that point was wrong, and this case records the
-  // real contract. What *was* wrong: the sweep awaited winget forever, so the install's outcome was
-  // silently lost. It now gives up after a grace and reports.
+  // Activation no longer installs: the Store-UI path needs a VPN confirmation and a visible
+  // Store window, so it stays behind pwsh7_install.
   const sweepMachine = makeContext({ rows: [executorRow(undefined)], versions: {}, deferred: true, jobs: true })
-  apply(sweepMachine.ctx, { installIfMissing: true })
+  apply(sweepMachine.ctx, {})
   await new Promise((resolve) => setTimeout(resolve, 60))
-  check('activation: installIfMissing starts the install without holding apply', () => {
-    assert.ok(sweepMachine.spawned.some((executable) => /winget/iu.test(executable)),
-      'the install never started')
+  check('activation: no automatic install is started at startup', () => {
+    assert.ok(!sweepMachine.spawned.some((executable) => /winget/iu.test(executable)),
+      'activation started an automatic install')
   })
 
   // The bounded grace, asserted where it is observable: an inline install whose winget never finishes

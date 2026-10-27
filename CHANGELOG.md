@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.16.0 — no startup auto-install, three-failure breaker
+
+- **`installIfMissing` is gone.** The config field, its activation branch, the install-attempt report
+  text and the client switch are removed. Starting the Host only detects and reports; installing is
+  always an explicit `pwsh7_install` (or the manual Win+R path). This also removes the old winget
+  startup route, so the only user-facing install methods are script install and manual install.
+- **Three-failure breaker, per Host process.** Consecutive failed script installs are counted
+  (exit 2/3/4/5 and job/spawn errors; a started-but-not-yet-installed click does not count). After
+  3, `pwsh7_install` starts no job: it asks the user to check the network/VPN, and only accepts
+  `userConfirmedFixed: true` after the user explicitly says it is fixed. That resets the counter and
+  allows one retry; three more failures open the breaker again. Success and an already-installed
+  runtime reset it. The failure text now begins by asking whether a VPN is active.
+- **Tool schema** gains `userConfirmedFixed`; the block is enforced before the VPN confirmation, so
+  repeating `vpnOffConfirmed: true` cannot bypass it.
+- **Docs** rewritten to the current behavior: two install paths, VPN confirmation, Store notice,
+  breaker, no metered preflight, three gates, no `installIfMissing`.
+- **Tests.** Host gate covers the breaker/no-job path and the explicit-fix reset; activation must
+  not start an install; client gate no longer expects the removed switch; all old config-driven
+  install tests use `method: 'store'` internally.
+
 ## 0.15.1 — the Store script survives 5.1 encoding, and only two install paths
 
 The 0.15.0 Store-UI script failed before opening the page with a parser error, not a VPN problem:

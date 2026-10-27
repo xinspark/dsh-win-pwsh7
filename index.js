@@ -17,16 +17,10 @@
  *    form, and only the version-stable form counts as acceptable wiring.
  * 2. Validate a user-specified path — `pwsh7_status` takes an optional `path` argument and
  *    checks it on the spot.
- * 3. Install — `pwsh7_install` (agent tool) or `installIfMissing: true` (config, checked at
- *    activation) runs `winget` for the Microsoft Store package of PowerShell, whose documented
- *    first benefit is automatic updating by Windows itself. There is exactly one install path:
- *    the winget MSIX and the per-machine MSI were measured, rejected, and are kept in the README
- *    as history — never offered. The tool registers the install as a **background job** and
- *    returns its id, because the Store handoff waits indefinitely when Windows has marked the
- *    connection as metered (measured 2026-10-14; the Store logs nothing at all in that state):
+ * 3. Install — `pwsh7_install` (agent tool) opens the Microsoft Store page and clicks its own
+ *    Install button with UI Automation, or tells the user the manual Win+R path. There is no
+ *    automatic startup install and no second installer. The tool returns a background job id;
  *    progress and output come from the platform's `job_output`, cancellation from `job_kill`.
- *    The same code reads the connection cost *before* it starts, so the report names that setting
- *    — and only that setting — instead of leaving a silent queue behind.
  *
  * It never writes the executor row's `pwshPath`: on Desktop both candidate rows refuse a
  * runtime write (the upstream row is disabled, the live row is owned by Desktop's generated
@@ -64,11 +58,9 @@ export const inject = ['subprocess', 'tools', 'configEditor', 'systemPrompt']
  * - id: win-pwsh7
  *   config:
  *     overridePath: 'D:\tools\pwsh\pwsh.exe'   # priority ① — validated, must be an ordinary PowerShell 7+
- *     installIfMissing: true                    # install from the Microsoft Store when no ordinary PowerShell 7 exists
  */
 export const Config = z.object({
   overridePath: z.string().volatile(),
-  installIfMissing: z.boolean().default(false).volatile(),
 })
 
 /**
@@ -167,11 +159,9 @@ const RECHECK_DELAY_MS = envMs('DSH_WIN_PWSH7_RECHECK_MS', 15000)
 
 /**
  * How long an **inline** install may block before the caller reports "still running" instead of
- * waiting. Activation gets a short grace — the host is starting and must not be held — while a
- * caller who asked for the install by hand gets longer. Without a bound, the winget→Store handoff
- * on a metered connection never returns at all (measured), which used to hang activation outright.
+ * waiting. A caller who asked for the install by hand gets a bounded grace; without it the
+ * winget→Store handoff could block the tool call indefinitely.
  */
-const ACTIVATION_INSTALL_GRACE_MS = envMs('DSH_WIN_PWSH7_ACTIVATION_GRACE_MS', 15 * 1000)
 const INLINE_INSTALL_GRACE_MS = envMs('DSH_WIN_PWSH7_INLINE_GRACE_MS', 120 * 1000)
 
 /**
@@ -354,6 +344,7 @@ function runtimeState(ctx) {
       },
       runtimeNote: '',
       refreshing: null,
+      installFailures: 0,
     }
     runtimeStates.set(ctx, state)
   }
@@ -455,7 +446,8 @@ export function apply(ctx, config) {
           'must stay open until the install starts. Only run it when the user explicitly asks to install ' +
           'PowerShell 7. The Store is the plugin\'s only install path: Windows keeps that package up to date by ' +
           'itself, and there is no second installer. It needs Microsoft Store and network, and never uninstalls ' +
-          'anything.',
+          'anything. After 3 consecutive failed script installs the tool stops starting jobs and asks for the ' +
+          'user\'s explicit confirmation that the VPN/network is fixed before allowing one retry.',
         parameters: {
           vpnOffConfirmed: {
             type: 'boolean',
@@ -463,6 +455,13 @@ export function apply(ctx, config) {
               'Set true only after the user confirms no VPN is active. If omitted or false, the tool starts ' +
               'nothing and returns the exact question to ask the user, plus the warning that the Store window ' +
               'must stay open.',
+          },
+          userConfirmedFixed: {
+            type: 'boolean',
+            description:
+              'Set true only after the user explicitly says the VPN/network problem is fixed, when the tool has ' +
+              'reported 3 consecutive failed installs. It resets the failure counter and allows one more script ' +
+              'install; a guess or an unconfirmed claim must not set it.',
           },
         },
         output: reportOutput(),
@@ -545,13 +544,11 @@ let hostContext = null
 function readRowConfig(ctx, fallback) {
   const merged = {
     overridePath: typeof fallback?.overridePath === 'string' ? fallback.overridePath : undefined,
-    installIfMissing: fallback?.installIfMissing === true,
   }
   try {
     const entry = ctx.configEditor.entries().find((candidate) => candidate?.options?.name === 'dsh-win-pwsh7')
     const values = entry?.options?.config
     if (isSet(values?.overridePath)) merged.overridePath = String(values.overridePath)
-    if (typeof values?.installIfMissing === 'boolean') merged.installIfMissing = values.installIfMissing
   } catch { /* fall back to the captured config */ }
   return merged
 }
@@ -585,34 +582,15 @@ class Pwsh7Dispatch extends Service {
 }
 
 /**
- * Activation sweep: detect, and when `installIfMissing` is set and no ordinary PowerShell 7
- * is available, install from the Microsoft Store first. Never runs on a timer; every outcome is logged.
+ * Activation sweep: detect and render the report. Installing is never automatic at startup: the
+ * Store-UI script needs a VPN confirmation and a visible Store window, so it stays behind
+ * `pwsh7_install`.
  * @param ctx - the row's Host context.
  * @param config - the resolved row configuration.
  * @returns the report text.
  */
 async function activationSweep(ctx, config) {
   const status = await detect(ctx, config)
-  if (config?.installIfMissing === true && status.chosen === undefined) {
-    if (resolveWinget() === undefined) {
-      const detail = installBlockedDetail()
-      ctx.logger?.warn?.('dsh-win-pwsh7: installIfMissing is enabled but winget is missing: %s', detail)
-      return renderStatus(ctx, config, { installAttempt: { ok: false, detail } })
-    }
-    ctx.logger?.info?.('dsh-win-pwsh7: installIfMissing is enabled and no ordinary PowerShell 7 exists — starting the Microsoft Store install')
-    const result = await installViaWinget(ctx, ACTIVATION_INSTALL_GRACE_MS)
-    if (result.pending === true) {
-      ctx.logger?.warn?.('dsh-win-pwsh7: %s', result.detail)
-      return renderStatus(ctx, config, { installAttempt: { ok: false, detail: result.detail } })
-    }
-    // The exit code is evidence, not a verdict: the Store can finish after winget has exited,
-    // so the sweep re-probes for a bounded while exactly as the background job does.
-    const after = await awaitRuntime(ctx, config)
-    const installAttempt = after.chosen === undefined
-      ? { ok: false, detail: `${result.detail}; no usable PowerShell 7 appeared after re-probing` }
-      : { ok: true, detail: result.detail }
-    return renderStatus(ctx, config, { installAttempt })
-  }
   return renderStatus(ctx, config, { status })
 }
 
@@ -821,7 +799,7 @@ function denialText(reading) {
  * ordinary-file PowerShell 7, or the Microsoft Store install path for a Store-only machine.
  * @param ctx - the row's Host context.
  * @param config - the resolved row configuration.
- * @param options - `explicitPath` (tool argument), `status` (precomputed detection), `installAttempt`.
+ * @param options - `explicitPath` (tool argument), `status` (precomputed detection).
  * @returns the report text.
  */
 async function renderStatus(ctx, config, options = {}) {
@@ -973,9 +951,6 @@ async function renderStatus(ctx, config, options = {}) {
     lines.push('Store alias or ordinary pwsh.exe was found.')
   } else {
     lines.push(`PowerShell 7: not usable — ${status.auto?.reason ?? 'no candidate was found'}.`)
-    if (options.installAttempt !== undefined && !options.installAttempt.ok) {
-      lines.push(`The configured auto-install did not produce a usable PowerShell 7: ${options.installAttempt.detail}`)
-    }
   }
   lines.push('Three ways forward:')
   lines.push('  1. Install PowerShell 7 from the Microsoft Store — ask for pwsh7_install (this plugin opens the')
@@ -1001,11 +976,6 @@ function resolveWinget() {
   return resolveOnPath('winget.exe')
 }
 
-/** One line for the activation log and the report's `installAttempt.detail`. */
-function installBlockedDetail() {
-  return 'winget was not found on PATH'
-}
-
 /**
  * The user-facing report when the winget method cannot start. The Store-UI method does not need
  * winget; it opens the same Store page a human would use.
@@ -1020,6 +990,28 @@ function installBlockedReport() {
   ].join(' ')
 }
 
+/** Reset the consecutive script-install failure counter (success, or an explicit user retry). */
+function resetInstallFailures(ctx) {
+  runtimeState(ctx).installFailures = 0
+}
+
+/** Count one failed script install. Started-but-not-installed does not count. */
+function recordInstallFailure(ctx) {
+  const state = runtimeState(ctx)
+  state.installFailures = Math.min(99, (state.installFailures ?? 0) + 1)
+}
+
+/** The stop text after 3 consecutive script-install failures. */
+function circuitBreakerReport() {
+  return [
+    'Install not started: 3 consecutive script installs have failed. Stop retrying and stop asking the same question.',
+    'First ask the user: is a VPN active? If yes, ask them to disconnect it, fully quit and restart Microsoft Store.',
+    'Ask them to check the network — especially the VPN — and reply explicitly when it is fixed.',
+    'Only after that explicit reply, call pwsh7_install with userConfirmedFixed: true and vpnOffConfirmed: true. Do not pass userConfirmedFixed on a guess or an unconfirmed claim.',
+    `Manual install: ${MANUAL_STORE_STEPS}. A manual Store install is detected automatically; no pwshPath pin is needed.`,
+  ].join(' ')
+}
+
 /**
  * Run `pwsh7_install`: skip when an acceptable PowerShell 7 is already in place (an ordinary
  * file or the Store family alias). Otherwise start the install as a **background job** and return
@@ -1029,13 +1021,17 @@ function installBlockedReport() {
  * @param ctx - the row's Host context.
  * @param config - the resolved row configuration.
  * @param exec - the tool execution, for the job's owner.
- * @param options - `{ method?: 'store-ui' | 'store', vpnOffConfirmed?: boolean }`.
+ * @param options - `{ method?: 'store-ui' | 'store', vpnOffConfirmed?: boolean, userConfirmedFixed?: boolean }`.
  * @returns the report text.
  */
 async function runInstall(ctx, config, exec, options = {}) {
   const before = await detect(ctx, config)
   if (before.chosen !== undefined) {
+    resetInstallFailures(ctx)
     return `PowerShell ${before.chosen.version} is already in place (${before.chosen.path}, ${labelOf(before.chosen)}); nothing to install.`
+  }
+  if (runtimeState(ctx).installFailures >= 3 && options?.userConfirmedFixed !== true) {
+    return circuitBreakerReport()
   }
   if (options?.vpnOffConfirmed !== true) {
     return [
@@ -1046,6 +1042,7 @@ async function runInstall(ctx, config, exec, options = {}) {
       `Manual install: ${MANUAL_STORE_STEPS}.`,
     ].join(' ')
   }
+  if (options?.userConfirmedFixed === true) resetInstallFailures(ctx)
 
   const method = options?.method === 'store' ? 'store' : 'store-ui'
   if (method === 'store' && resolveWinget() === undefined) return installBlockedReport()
@@ -1153,6 +1150,7 @@ function storeUiJobSpec(ctx, config, exec) {
         handle = spawnStoreUi(ctx)
       } catch (error) {
         const detail = `could not open Microsoft Store: ${describe(error)}`
+        recordInstallFailure(ctx)
         job.updateProgress(detail)
         job.append(`${detail}\n`)
         return { cancel() {}, done: Promise.resolve({ status: 'failed', detail, result: detail }) }
@@ -1184,6 +1182,7 @@ function storeUiJobSpec(ctx, config, exec) {
             const installed = after.chosen !== undefined
             let verdict
             if (!clicked) {
+              recordInstallFailure(ctx)
               const reason = outcome.exitCode === 2
                 ? 'the Microsoft Store page did not load, or its Install button was not found'
                 : outcome.exitCode === 5
@@ -1195,10 +1194,11 @@ function storeUiJobSpec(ctx, config, exec) {
                       : `the Store UI script exited with code ${outcome.exitCode}`
               verdict = [
                 `${reason}.`,
-                'If a VPN is active, disconnect it, fully quit and restart Microsoft Store, then retry.',
+                'First ask the user: is a VPN active? If yes, have them disconnect it, fully quit and restart Microsoft Store, then retry. Do not start another install until they answer.',
                 `Manual install: ${MANUAL_STORE_STEPS}.`,
               ]
             } else if (installed) {
+              resetInstallFailures(ctx)
               verdict = [`PowerShell ${after.chosen.version} is now installed (${after.chosen.path}, ${labelOf(after.chosen)}); the pwsh tool is ready.`]
             } else {
               verdict = [
@@ -1217,6 +1217,7 @@ function storeUiJobSpec(ctx, config, exec) {
             }
           } catch (error) {
             clearInterval(timer)
+            recordInstallFailure(ctx)
             const detail = `the Store UI install failed: ${describe(error)}`
             job.append(`\n${detail}\n`)
             return { status: 'failed', detail, result: detail }
@@ -1235,15 +1236,17 @@ async function startStoreUiInstall(ctx, config, exec) {
     try {
       handle = spawnStoreUi(ctx)
     } catch (error) {
+      recordInstallFailure(ctx)
       return `Could not open Microsoft Store: ${describe(error)}. Manual install: ${MANUAL_STORE_STEPS}.`
     }
     const outcome = await handle.done
     cleanupStoreUi(handle)
     const clicked = /STORE_UI_CLICKED(?:_LEGACY)?:/u.test(handle.collected?.stdout?.readFrom(0).text ?? '')
     if (!clicked) {
+      recordInstallFailure(ctx)
       return [
         'The Microsoft Store page did not expose an Install button.',
-        'If a VPN is active, disconnect it, fully quit and restart Microsoft Store, then retry.',
+        'First ask the user: is a VPN active? If yes, have them disconnect it, fully quit and restart Microsoft Store, then retry.',
         `Manual install: ${MANUAL_STORE_STEPS}.`,
       ].join(' ')
     }
@@ -1819,9 +1822,9 @@ async function settledWithin(handle, graceMs) {
 }
 
 /**
- * The inline install, used where no job registry is composed (and by the activation sweep's
- * `installIfMissing`). The exit code alone never counts as success — the caller re-validates —
- * and an install that outlives its grace is reported as still running rather than blocking.
+ * The inline install, used where no job registry is composed (the hidden winget test route).
+ * The exit code alone never counts as success — the caller re-validates — and an install that
+ * outlives its grace is reported as still running rather than blocking.
  * @param ctx - the row's Host context.
  * @param graceMs - how long this call may block; omitted means "wait for winget".
  * @returns `{ ok, detail, pending? }`; winget output is only supporting detail.
