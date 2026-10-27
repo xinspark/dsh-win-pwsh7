@@ -1,6 +1,6 @@
 {
   "name": "dsh-win-pwsh7",
-  "version": "0.12.3",
+  "version": "0.13.0",
   "type": "module",
   "description": "Detect, validate, and (on request) install PowerShell 7 for the Harness pwsh tool on Windows — the self-updating Microsoft Store package by default, with the connection checked first because Windows defers Store downloads on a metered connection — and pin the version-stable Store family alias.",
   "license": "MIT",
@@ -52,6 +52,7 @@
     "prepublishOnly": "npm run check"
   },
   "dsh": {
+    "verifiedAgainst": "0.2.1-rc.3",
     "bundle": {
       "patch": "./cordis.patch.yml"
     },

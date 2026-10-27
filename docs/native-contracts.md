@@ -7,8 +7,9 @@ and re-check after an upgrade. Line numbers belong to the build below; symbols a
 ## Baseline
 
 - DSH build: **0.2.1-rc.3** (every package below reports this version).
-- Plugin baseline: **0.12.3** (verified by its author against desktop 0.2.1-rc.2; the rc.3 delta is
-  what this file and `tools/check-native-contracts.mjs` cover).
+- Plugin baseline: **0.13.0** (`package.json` `dsh.verifiedAgainst`). The previous 0.12.3 release
+  was verified by its author against desktop 0.2.1-rc.2; the rc.3 delta is what this file and
+  `tools/check-native-contracts.mjs` cover.
 - `app.asar`: 21,021 files.
 - The plugin itself is installed from a tarball; this file is about the **harness**, not the plugin.
 

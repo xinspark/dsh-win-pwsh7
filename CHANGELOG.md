@@ -1,5 +1,46 @@
 # Changelog
 
+## 0.13.0 — enabled means gated
+
+The plugin was observational: with only Windows PowerShell 5.1 it warned the model and let the
+command run. This release makes the enabled state a contract. The model sees a call-time error
+before dispatch, the user sees the install/configure/disable choices, and no PowerShell process is
+started for a denied call.
+
+- **The gate reads the executor, not a reconstruction.** `ctx.shell.pwshPath` is the exact
+  executable `dsh-tool-pwsh` will spawn (`PwshLocalExecutor.argv()` uses it). The read
+  feature-detects that concrete getter and falls back to `shell.config.pwshPath.get()` +
+  `resolvePwshPath()`, then to the default resolver. `configEditor.entries()` only exposes
+  `include`-owned rows, so a Desktop-generated live row could be missed; the report still lists the
+  rows for diagnosis.
+- **`ctx.tools.guard` denies `pwsh` before dispatch.** A per-context snapshot drives the guard; a
+  `tools/pre-execute` listener refreshes it when the snapshot is unknown or older than
+  `DSH_WIN_PWSH7_GATE_TTL_MS`, and `app-boot/config-reload` / `plugin-manager/changed` refresh it
+  after profile changes. `pwsh7_status` and `pwsh7_install` are never gated.
+- **The denial is self-contained.** It names the reason (5.1, broken pin, no PowerShell 7, unknown),
+  says not to retry, and offers `pwsh7_status` (exact patch), `pwsh7_install` (after the user
+  agrees), or disabling the plugin. The 5.1 prompt section now says the tool is blocked instead of
+  advising the `;` workaround.
+- **Install preflight.** `resolveWinget()` then `networkCost()`: the install starts only for
+  `Unrestricted` with a readable profile. `Fixed` / `Variable` / `Unknown` / an unreadable probe /
+  a missing winget returns a report naming the network and the setting to turn off, and registers
+  **no job**. `installIfMissing` skips with the same reason instead of starting a doomed install.
+- **Configuration guidance.** The report keeps the row's existing config fields (the `config` block
+  is replaced wholesale), distinguishes add vs update, and states that `overridePath` only changes
+  probing and recommendations — not executor wiring.
+- **Client.** The diagnostics section derives a metered-network line and a fix block with the
+  profile patch and a copy button from the report it already receives.
+- **Native contracts.** `docs/native-contracts.md` records the 0.2.1-rc.3 package table and the
+  symbols the plugin relies on; `tools/check-native-contracts.mjs` (36 checks over 12 packages)
+  runs after the host and client gates and fails when a symbol or prototype disappears.
+- **Tests.** Gate allow/deny, broken pin, own tools, pre-execute refresh, config reload, add/update
+  patch, wholesale-config warning, overridePath-not-wiring, metered/unknown/no-winget starting no
+  job, and the client's network line and copyable patch.
+
+This is a breaking behavioral change for anyone who relied on the 5.1 fallback while the plugin was
+enabled. Disabling the plugin restores the previous behavior; the plugin still never writes
+`pwshPath` and never uninstalls PowerShell.
+
 ## 0.12.3 — the gates read the desktop build's nested harness
 
 The desktop build (`DeepSeek Harness.exe` 0.2.1-rc.2) packs a different layout than 2.0.19-next: the

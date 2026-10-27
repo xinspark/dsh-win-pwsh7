@@ -10,13 +10,21 @@
 
 **它不自带 PowerShell，也不写你的配置。** 安装永远是显式动作（你要的工具调用，或你打开的配置项）；它从不卸载任何东西。
 
+## 0.13.0：启用即门禁
+
+启用本插件期间，`pwsh` 工具**只在实际执行器解析到 PowerShell 7+ 时才放行**；否则每次调用在 dispatch 之前被 `ctx.tools.guard` 拒绝，错误文案让模型向用户报告“安装 / 配置 / 禁用”三条路，并且**不会启动任何 PowerShell 进程**。禁用插件即恢复默认运行时，插件仍然不写 `pwshPath`。
+
+- 判定读执行器自己的 `ctx.shell.pwshPath`，不是扫配置行；`overridePath` 只影响探测与推荐，**不接线**。
+- 安装前强制预检：winget 在不在、有没有活动网络、连接是不是计量；计量 / `Unknown` / 探测失败 / 无 winget 都**不启动安装作业**，并点名网络与要关掉的设置。
+- 配置引导给出可粘贴的 patch（区分 add / update，并警告 `config` 整体替换）；`pwsh7_status` / `pwsh7_install` 不受门禁，是恢复通道。
+
 > 本文是简体中文版；完整证据与出处（含官方文档链接、逐条实测记录）在 [README.en.md](README.en.md)。
 
 ## 安装本插件
 
 ```powershell
 # 从 GitHub 安装（推荐：锁定 tag，上游后续推送不会悄悄改变已装版本）
-dsh plugin --profile desktop add github:XinSpark/dsh-win-pwsh7#v0.12.1
+dsh plugin --profile desktop add github:XinSpark/dsh-win-pwsh7#v0.13.0
 # desktop 换成你在用的 profile —— `dsh plugin list` 能看出来是哪个
 ```
 
@@ -104,7 +112,9 @@ pwsh7_install         从 Microsoft Store 安装 PowerShell 7，以后台作业�
                       用 job_output 看进度、job_kill 停止。无参数：安装路径只有一条
 ```
 
-`pwsh7_install` 是有副作用的工具：只在用户明确要求时装。它会拒绝重复安装（已有普通 PowerShell 7 **或**可用的商店别名时报「already in place」），并且从不卸载 PowerShell —— 卸载插件不会动你的 PowerShell。另一个答案是**禁用插件**。
+`pwsh` 工具本身受门禁：启用期间，除非执行器实际解析到 PowerShell 7+，每次调用在 dispatch 前被 `ctx.tools.guard` 拒绝，文案给安装/配置/禁用三条路；`pwsh7_status` / `pwsh7_install` 不受门禁，是恢复通道。
+
+`pwsh7_install` 是有副作用的工具：只在用户明确要求时装。**启动前先做网络预检**（winget、活动网络、非计量）；预检不过就返回修复指引，不启动作业。它会拒绝重复安装（已有普通 PowerShell 7 **或**可用的商店别名时报「already in place」），并且从不卸载 PowerShell —— 卸载插件不会动你的 PowerShell。另一个答案是**禁用插件**。
 
 ### 安装为什么是后台作业
 
@@ -161,8 +171,10 @@ The `pwsh` tool cannot start: an executor row pins C:\…\pwsh.exe, which does n
 
 | 键 | 默认 | 说明 |
 |---|---|---|
-| `overridePath` | 未设 | 优先级①的显式 `pwsh.exe`。必须能启动并报告 PowerShell 7+；未通过校验就静默回落到自动探测 |
-| `installIfMissing` | `false` | 启动时若没有可用的 PowerShell 7，就后台安装（等价于 `pwsh7_install`），结果写进状态报告 |
+| `overridePath` | 未设 | 优先级①的显式 `pwsh.exe`。必须能启动并报告 PowerShell 7+；未通过校验就静默回落到自动探测。**只影响插件的探测与推荐，不接线** |
+| `installIfMissing` | `false` | 启动时若没有可用的 PowerShell 7，就先做网络预检，通过才后台安装（等价于 `pwsh7_install`）；预检不过只记录，不启动安装 |
+
+`overridePath` 不会改变执行器的 `pwshPath`；要把 `pwsh` 接到某个路径，用报告里给出的 profile 补丁。
 
 两项都是 `volatile()`：插件页的配置卡改完保存即生效，不需要重启。也可以直接写进 profile 补丁：
 

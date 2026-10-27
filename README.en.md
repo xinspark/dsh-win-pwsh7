@@ -14,11 +14,26 @@ falling back to Windows PowerShell 5.1. Three legs, in priority order:
 **It does not ship PowerShell, and it does not write configuration.** Installing is always
 an explicit act (a tool you ask for, or a config key you set); it never uninstalls anything.
 
+## 0.13.0: enabled means gated
+
+While this plugin is enabled, the `pwsh` tool is allowed **only when the executor actually resolves
+to PowerShell 7+**. Otherwise every call is denied by a global `ctx.tools.guard` before dispatch,
+the model is told to report install / configure / disable, and **no PowerShell process starts**.
+Disabling the plugin restores the default runtime; the plugin still never writes `pwshPath`.
+
+- The reading comes from the executor's own `ctx.shell.pwshPath`, not from config rows;
+  `overridePath` only changes probing and recommendations, **not executor wiring**.
+- The install preflight is mandatory: winget present, an active network, and a non-metered
+  connection. Metered / `Unknown` / a failed probe / no winget **start no install job** and name
+  the network and the setting to turn off.
+- Configuration guidance prints a pasteable patch (add vs update, with a wholesale-`config`
+  warning); `pwsh7_status` / `pwsh7_install` stay outside the gate as the recovery path.
+
 ## Installing this plugin
 
 ```powershell
 # From GitHub (recommended: pinned to the tag, so a later push cannot change what is installed)
-dsh plugin --profile desktop add github:XinSpark/dsh-win-pwsh7#v0.12.1
+dsh plugin --profile desktop add github:XinSpark/dsh-win-pwsh7#v0.13.0
 # replace `desktop` with the profile you use — `dsh plugin list` says which one that is
 ```
 
@@ -161,10 +176,17 @@ pwsh7_install              install PowerShell 7 from the Microsoft Store as a ba
                            job_kill. No parameters: there is one install path
 ```
 
-`pwsh7_install` is a side-effecting tool: only ask for it when you mean it. It refuses to
-double-install (reports "already in place" when an ordinary PowerShell 7 **or** a working Store
-alias exists) and it never uninstalls PowerShell — uninstalling the plugin leaves your PowerShell
-alone. The other answer, when PowerShell 7 is not wanted, is to disable the plugin; see
+The `pwsh` tool itself is gated: while this plugin is enabled, every call is denied by
+`ctx.tools.guard` before dispatch unless the executor actually resolves to PowerShell 7+; the
+reason names install / configure / disable. `pwsh7_status` and `pwsh7_install` stay outside the
+gate as the recovery path.
+
+`pwsh7_install` is a side-effecting tool: only ask for it when you mean it. It runs a **network
+preflight** (winget present, an active network, not metered) and returns the fix instead of
+starting a job when that fails. It refuses to double-install (reports "already in place" when an
+ordinary PowerShell 7 **or** a working Store alias exists) and it never uninstalls PowerShell —
+uninstalling the plugin leaves your PowerShell alone. The other answer, when PowerShell 7 is not
+wanted, is to disable the plugin; see
 [Installing PowerShell 7](#installing-powershell-7-one-path-and-one-alternative).
 
 ### Why the install is a background job
@@ -270,10 +292,12 @@ Add this under the plugin's own row in the profile patch:
 
 - `overridePath` is validated on every start; a rejected value falls through to auto-detect
   and is reported with its reason. A Store family alias is accepted here; a version-numbered
-  Store path is accepted as a runtime but reported as un-pinnable.
-- `installIfMissing` defaults to `false`. When it triggers, the install runs **inline at
-  activation** (not as a job: the activation sweep is already fire-and-forget), is logged, and
-  is skipped once an ordinary PowerShell 7 or a Store alias exists.
+  Store path is accepted as a runtime but reported as un-pinnable. It only changes what the
+  plugin probes and recommends — **it does not wire the executor**; use the printed patch for that.
+- `installIfMissing` defaults to `false`. When it triggers, it first runs the same network
+  preflight as `pwsh7_install`; a metered, unknown or unreadable connection is logged and the
+  auto-install is skipped. A passing preflight runs the install inline at activation, is logged,
+  and is skipped once an ordinary PowerShell 7 or a Store alias exists.
 
 ## Example report (this machine: the Store family alias, wired in by a patch)
 
