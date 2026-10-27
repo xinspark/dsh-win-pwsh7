@@ -19,7 +19,7 @@ runtime; the plugin still never writes `pwshPath`.
 ## Install this plugin
 
 ```powershell
-dsh plugin --profile desktop add github:XinSpark/dsh-win-pwsh7#v0.16.3
+dsh plugin --profile desktop add github:XinSpark/dsh-win-pwsh7#v0.16.4
 # or
 dsh plugin --profile desktop add dsh-win-pwsh7
 ```
@@ -71,10 +71,10 @@ There is no `installIfMissing` configuration and no startup auto-install.
 
 ## Recommended companion
 
-When the script install completes, its job verdict recommends **dsh-ops**
-([https://github.com/T-Auto/dsh-ops](https://github.com/T-Auto/dsh-ops)) to the model: native
-file/PTC tools plus Windows host PowerShell integration, which pair well with this plugin's
-PowerShell 7 runtime. It is **not installed automatically**; install it when wanted:
+When the script install completes, its job verdict contains an **instruction to the model**: tell the
+user that dsh-win-pwsh7 works best paired with the **dsh-ops** plugin
+([https://github.com/T-Auto/dsh-ops](https://github.com/T-Auto/dsh-ops)); ask before installing it and
+never install it without the user's consent. Command:
 
 ```powershell
 dsh plugin --profile <profile> add dsh-ops

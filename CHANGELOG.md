@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.16.4 — make the companion recommendation an instruction to the model
+
+- The completed script-install verdict now begins the companion text with `ACTION REQUIRED:`: the
+  model must tell the user that dsh-win-pwsh7 is best paired with the dsh-ops plugin, offer to install
+  it, and not install it without consent. The repository link and install command stay included.
+- READMEs describe it as an instruction, not a passive recommendation.
+- It is still emitted only in the completed script-install result.
+
 ## 0.16.3 — link the dsh-ops companion
 
 - The completed script-install recommendation now includes the companion repository link:
