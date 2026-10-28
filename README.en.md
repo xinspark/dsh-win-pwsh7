@@ -44,7 +44,7 @@ multi-session validation passed, so the switch is default-on again.
 ## Install this plugin
 
 ```powershell
-dsh plugin --profile desktop add github:XinSpark/dsh-win-pwsh7#v0.2.3
+dsh plugin --profile desktop add github:XinSpark/dsh-win-pwsh7#v0.2.4
 # or
 dsh plugin --profile desktop add dsh-win-pwsh7
 ```
