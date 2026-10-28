@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.4 — plugin page aligned with the dsh-ops card language
+
+- Restyled both contributions after the installed dsh-ops 0.5.0 branch: a 0.5px hairline card on
+  `radius-lg` with a shaded card body, 13px/600 group titles, max-content fact labels, and the
+  same input, button and focus-token metrics.
+- Split the configure surface into two cards: the executor path sits in a shaded body, the
+  dsh-ops coexistence switch sits in the card head, and save/reset follow the cards.
+- The status section is one card now: title, refresh metric and action in the head, the facts in
+  a shaded body, and the profile patch as a sunken preview block.
+- Updated the client gate to assert the card language instead of the retired flat section.
+
 ## 0.2.3 — removable dsh-ops coexistence bridge
 
 - Moved the bridge, profile-patch ownership, and pure name planning into `lib/dsh-ops-bridge.js`.

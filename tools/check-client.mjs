@@ -176,10 +176,19 @@ check('the card renders every hint in Chinese', () => {
 check('the summary view renders nothing, as the row list expects', () => {
   assert.equal(card({ view: 'summary' }), null)
 })
-check('the configure surface is one flat section, not a card inside the native page', () => {
+check('the configure surface uses the dsh-ops card language', () => {
+  // Aligned with the installed dsh-ops branch: one hairline card per group, a shaded
+  // card body for editable fields, and the toggle in the card head.
   const sections = elementsOf(cardTree, 'section')
-  assert.equal(sections.length, 1, `expected one section, found ${sections.length}`)
-  assert.equal(sections[0].props.className, 'dw7-section')
+  assert.equal(sections.length, 2, `expected two cards, found ${sections.length}`)
+  for (const section of sections) {
+    assert.match(String(section.props.className), /\bdw7-card\b/u)
+    assert.match(String(section.props.className), /\bdw7-group\b/u)
+  }
+  const bodies = elementsOf(cardTree, 'div').filter(node => node.props.className === 'dw7-card-body')
+  assert.equal(bodies.length, 1, `expected one shaded body for the editable card, found ${bodies.length}`)
+  assert.ok(!elementsOf(cardTree, 'section').some(node => /\bdw7-section\b/u.test(String(node.props.className))),
+    'the retired flat section class survived')
 })
 
 // A second application with no controller for this row — the state that used to throw inside the
@@ -256,16 +265,28 @@ check('the en dictionary carries no Chinese', () => {
   const cjk = en.match(/[\u4e00-\u9fff]/gu)
   assert.equal(cjk, null, `Chinese in the en dictionary: ${cjk === null ? '' : cjk.join('')}`)
 })
-check('one flat stylesheet covers both sections and keeps the native control scale', () => {
+check('one card-language stylesheet covers both surfaces', () => {
   assert.ok(/const CSS = `/u.test(source), 'the shared stylesheet is missing')
   assert.ok(!/CSS_CARD|CSS_DIAG/u.test(source), 'the old per-card stylesheets survived')
-  for (const selector of ['.dw7-section{', '.dw7-status{', '.dw7-estimate{', '.dw7-facts{', '.dw7-input{', '.dw7-save{', '.dw7-small{', '.dw7-code{']) {
+  for (const selector of ['.dw7-card{', '.dw7-card-body{', '.dw7-group-title{', '.dw7-detail{', '.dw7-status-card{',
+    '.dw7-status-body{', '.dw7-facts{', '.dw7-input{', '.dw7-save{', '.dw7-small{', '.dw7-code{']) {
     assert.ok(source.includes(selector), `the stylesheet does not define ${selector}`)
   }
+  // The dsh-ops branch's card chrome: a 0.5px hairline on radius-lg with a shaded body,
+  // 13px/600 group titles, and description-list labels sized to their own text.
+  assert.ok(source.includes('border:.5px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-lg);padding:14px;gap:10px;'),
+    'the card chrome no longer matches the dsh-ops card')
+  assert.ok(source.includes('background:var(--dsw-alias-interactive-bg-hover);'),
+    'the card body no longer uses the sunken surface')
+  assert.ok(source.includes('font-size:13px;font-weight:600;line-height:20px;'),
+    'the group title metrics no longer match the dsh-ops card')
+  assert.ok(source.includes('grid-template-columns:max-content minmax(0,1fr);align-items:baseline;column-gap:14px;'),
+    'the fact list no longer uses the native max-content label column')
   const start = source.indexOf('const CSS = `')
   const css = source.slice(start, source.indexOf('`', start + 20))
   assert.ok(!/#[0-9a-f]{3,8}\b/iu.test(css), 'the stylesheet hard-codes a color instead of using a theme token')
 })
+
 check('no metered-network copy or branch remains', () => {
   assert.ok(!/metered/iu.test(source), 'the removed metered-network feature still has copy or a branch')
 })

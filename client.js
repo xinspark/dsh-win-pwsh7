@@ -1,6 +1,7 @@
-// client.js — the browser half of dsh-win-pwsh7: the configure section, the diagnostics
-// section, and the re-detect action on the plugin pages. Both render as flat native detail
-// sections — no card chrome, and the host page's own 32px section rhythm does the spacing.
+// client.js — the browser half of dsh-win-pwsh7: the configure cards and the status card
+// on the plugin pages. Both use the same chrome as the installed dsh-ops branch — a 0.5px
+// hairline card on radius-lg, a shaded card body, 13px/600 titles and max-content fact
+// labels — while the Host page keeps its own 32px rhythm between detail sections.
 //
 // One operation, two callers: the diagnostics section and the re-detect button call the
 // same Host method (`status`) that the `pwsh7_status` agent tool runs — over the Remote
@@ -97,6 +98,8 @@ window.__ModuleLoader__.load({
       redetect: 'Re-detect',
       redetecting: 'Detecting…',
       card_title: 'Configuration',
+      executor_title: 'PowerShell 7 executor',
+      executor_hint: 'The runtime the pwsh tool runs. This page only probes and recommends; the profile patch in the status section does the wiring.',
       field_overridePath: 'PowerShell 7 path',
       overridePath_hint: 'Optional explicit pwsh.exe path (`overridePath`). Empty = auto-detect. It must spawn and report PowerShell 7 or newer; the Store family alias is accepted, while a version-numbered Store path is never pinned. This only changes what the plugin probes and recommends — it does not wire the pwsh tool. Use the patch in the status section for that.',
       field_dshOpsCompat: 'Coexist with dsh-ops',
@@ -141,6 +144,8 @@ window.__ModuleLoader__.load({
       redetect: '重新检测',
       redetecting: '检测中…',
       card_title: '配置',
+      executor_title: 'PowerShell 7 执行器',
+      executor_hint: 'pwsh 工具实际运行的 PowerShell。本页只做探测与推荐；接线用状态区里的 profile 补丁。',
       field_overridePath: 'PowerShell 7 路径',
       overridePath_hint: '可选的显式 pwsh.exe 路径（`overridePath`）。留空 = 自动探测。必须能启动并报告 PowerShell 7 及以上；Store 家族别名可用，版本号目录永不被 pin。这里只影响插件的探测与推荐，不会给 pwsh 工具接线；接线请用状态区里的补丁。',
       field_dshOpsCompat: '与 dsh-ops 共存',
@@ -164,48 +169,61 @@ window.__ModuleLoader__.load({
     // while its section is mounted, so both sections carry it: a page can render the status
     // section without ever rendering the configure section.
     const CSS = `
-.dw7-section{display:flex;flex-direction:column;gap:12px;min-width:0;}
-.dw7-head{display:flex;align-items:baseline;gap:10px;min-width:0;}
-.dw7-title{margin:0;color:var(--dsw-alias-label-primary);font-size:14px;font-weight:500;line-height:20px;}
-.dw7-status{box-sizing:border-box;display:flex;flex-direction:column;gap:10px;padding:14px;border:.5px solid var(--dsw-alias-border-l1);border-radius:10px;font-size:13px;min-width:0;}
-.dw7-status-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;min-width:0;}
-.dw7-status-title{flex:none;color:var(--dsw-alias-label-primary);font-size:13px;font-weight:600;line-height:20px;}
-.dw7-status-metric{color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px;}
-.dw7-status-action{margin-left:auto;flex:none;}
-.dw7-estimate{display:grid;gap:10px;padding:12px;border-radius:8px;background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-secondary);font-size:13px;line-height:1.6;min-width:0;}
-.dw7-estimate p{margin:0;}
-.dw7-facts{display:grid;gap:6px;margin:0;}
-.dw7-facts>div{display:grid;grid-template-columns:72px minmax(0,1fr);gap:10px;}
-.dw7-facts dt{color:var(--dsw-alias-label-tertiary);}
-.dw7-facts dd{margin:0;overflow-wrap:anywhere;}
-.dw7-note{color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:1.6;}
+.dw7-settings{display:flex;flex-direction:column;gap:12px;min-width:0;color:var(--dsw-alias-label-primary);font:inherit;}
+.dw7-settings p{margin:0;line-height:1.55;overflow-wrap:anywhere;}
+.dw7-group{display:flex;flex-direction:column;min-width:0;}
+.dw7-card{border:.5px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-lg);padding:14px;gap:10px;}
+.dw7-group-head{display:flex;align-items:flex-start;gap:16px;min-width:0;}
+.dw7-card .dw7-group-head{align-items:flex-start;}
+.dw7-group-head .dw7-field-text{display:flex;flex-direction:column;flex:1 1 auto;min-width:0;gap:2px;}
+.dw7-group-head > button[role=switch]{flex:none;margin-top:1px;}
+.dw7-group-title{margin:0 0 4px;font-size:13px;font-weight:600;line-height:20px;color:var(--dsw-alias-label-secondary);}
+.dw7-card .dw7-group-title{margin:0;}
+.dw7-card-body{display:flex;flex-direction:column;min-width:0;padding:12px;border-radius:var(--dsw-radius-md);background:var(--dsw-alias-interactive-bg-hover);}
+.dw7-card-body > .dw7-field{padding:10px 0;}
+.dw7-card-body > .dw7-field:first-child{padding-top:0;}
+.dw7-card-body > .dw7-field:last-child{padding-bottom:0;}
+.dw7-card-body .dw7-field + .dw7-field{border-top:.5px solid var(--dsw-alias-border-l2);}
 .dw7-field{display:flex;flex-direction:column;gap:6px;padding:12px 0;min-width:0;}
 .dw7-field + .dw7-field{border-top:.5px solid var(--dsw-alias-border-l2);}
-.dw7-label{color:var(--dsw-alias-label-primary);font-size:13px;font-weight:500;line-height:1.5;}
-.dw7-input{box-sizing:border-box;width:100%;height:34px;padding:0 12px;border:.5px solid var(--dsw-alias-border-l4);border-radius:var(--dsw-radius-md);background:var(--dsw-alias-bg-layer-3);font-family:inherit;font-size:13px;line-height:1.5;color:var(--dsw-alias-label-primary);}
+.dw7-field-text{display:flex;flex-direction:column;flex:1 1 auto;gap:4px;min-width:0;}
+.dw7-field-label{font-size:13px;font-weight:500;line-height:1.5;color:var(--dsw-alias-label-primary);}
+.dw7-field-hint{margin:0;font-size:12px;line-height:1.5;color:var(--dsw-alias-label-tertiary);}
+.dw7-input{box-sizing:border-box;width:100%;height:34px;padding:0 12px;border:.5px solid var(--dsw-alias-border-l4);border-radius:var(--dsw-radius-md);background:var(--dsw-alias-bg-layer-3);color:var(--dsw-alias-label-primary);font:inherit;font-size:13px;line-height:1.5;}
 .dw7-input:focus-visible{outline:none;border-color:var(--dsw-alias-state-business-primary);}
 .dw7-input:disabled{color:var(--dsw-alias-label-tertiary);cursor:default;}
-.dw7-hint{margin:0;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:1.5;}
-.dw7-switch-row{display:flex;align-items:flex-start;gap:16px;min-width:0;}
-.dw7-switch-text{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:4px;}
+.dw7-input[aria-invalid=true]{border-color:var(--dsw-alias-state-error-primary);}
+.dw7-field-error{margin:0;font-size:12px;line-height:18px;color:var(--dsw-alias-state-error-primary);}
 .dw7-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding-top:4px;}
 .dw7-save{appearance:none;border:1px solid transparent;border-radius:var(--dsw-radius-md);padding:5px 14px;font:inherit;font-size:13px;line-height:1.5;cursor:pointer;background:var(--dsw-alias-label-primary);color:var(--dsw-alias-bg-layer-3);}
 .dw7-save:disabled{opacity:.4;cursor:default;}
-.dw7-save:focus-visible,.dw7-reset:focus-visible,.dw7-small:focus-visible{outline:var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:1px;}
 .dw7-reset{border:none;background:none;padding:0;font:inherit;font-size:12px;line-height:1.5;color:var(--dsw-alias-label-secondary);cursor:pointer;}
-.dw7-reset:hover:not(:disabled){color:var(--dsw-alias-label-primary);}
-.dw7-reset:disabled{cursor:default;}
+.dw7-reset:disabled{opacity:.4;cursor:default;}
 .dw7-small{box-sizing:border-box;height:28px;padding:0 10px;border:.5px solid var(--dsw-alias-border-l3);border-radius:var(--dsw-radius-sm);background:transparent;font:inherit;font-size:12px;line-height:18px;color:var(--dsw-alias-label-primary);cursor:pointer;}
-.dw7-small:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover);}
 .dw7-small:disabled{opacity:.4;cursor:not-allowed;}
+.dw7-detail{display:flex;flex-direction:column;gap:12px;min-width:0;}
+.dw7-detail-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;min-width:0;}
+.dw7-detail-title{margin:0;flex:none;font-size:13px;font-weight:600;line-height:20px;color:var(--dsw-alias-label-primary);}
+.dw7-detail-metric{font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary);}
+.dw7-detail-action{margin-left:auto;flex:none;}
+.dw7-status-card{display:flex;flex-direction:column;gap:10px;padding:14px;border:.5px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-lg);min-width:0;}
+.dw7-status-body{padding:12px;border-radius:var(--dsw-radius-md);background:var(--dsw-alias-interactive-bg-hover);min-width:0;}
+.dw7-status-lead{margin:0 0 12px;color:var(--dsw-alias-label-secondary);font-size:13px;line-height:1.6;}
+.dw7-facts{display:grid;gap:6px;margin:0;}
+.dw7-facts > div{display:grid;grid-template-columns:max-content minmax(0,1fr);align-items:baseline;column-gap:14px;}
+.dw7-facts dt{color:var(--dsw-alias-label-tertiary);font-size:13px;}
+.dw7-facts dd{margin:0;overflow-wrap:anywhere;font-size:13px;}
+.dw7-status-note{margin:12px 0 0;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:1.6;}
+.dw7-note{margin:0;font-size:12px;line-height:1.6;color:var(--dsw-alias-label-tertiary);}
 .dw7-report{margin:0;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere;}
-.dw7-empty{margin:0;color:var(--dsw-alias-label-tertiary);font-size:13px;line-height:20px;}
 .dw7-error{margin:0;color:var(--dsw-alias-state-error-primary);font-size:12px;line-height:18px;overflow-wrap:anywhere;}
 .dw7-ok{margin:0;color:var(--dsw-alias-state-success-primary);font-size:12px;line-height:1.5;}
-.dw7-patch{display:flex;flex-direction:column;gap:8px;min-width:0;}
-.dw7-patch-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0;}
-.dw7-patch-note{margin:0;flex:1;min-width:0;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:1.5;}
+.dw7-preview{display:flex;flex-direction:column;gap:10px;padding:12px;border-radius:var(--dsw-radius-md);background:var(--dsw-alias-interactive-bg-hover);font-size:13px;}
+.dw7-preview-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0;}
+.dw7-preview-note{margin:0;flex:1;min-width:0;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:1.5;}
 .dw7-code{box-sizing:border-box;margin:0;padding:10px 12px;border:.5px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-md);background:var(--dsw-alias-bg-layer-3);color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-mono,ui-monospace,SFMono-Regular,Menlo,monospace);font-size:12px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere;}
+.dw7-save:focus-visible,.dw7-reset:focus-visible,.dw7-small:focus-visible,.dw7-input:focus-visible{outline:var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:1px;}
+@media(max-width:440px){.dw7-facts > div{grid-template-columns:1fr;gap:2px;}}
 `
 
     return {
@@ -369,40 +387,43 @@ window.__ModuleLoader__.load({
             }
           }
           const patchBlock = patch !== null
-            ? h('div', { className: 'dw7-patch' },
-              h('div', { className: 'dw7-patch-head' },
-                h('p', { className: 'dw7-patch-note' }, t('patch_note')),
-                h('button', { className: 'dw7-small', onClick: () => void copyPatch() }, copied ? t('copied') : t('copy_patch')),
+            ? h('div', { className: 'dw7-preview' },
+              h('div', { className: 'dw7-preview-head' },
+                h('p', { className: 'dw7-preview-note' }, t('patch_note')),
+                h('button', { type: 'button', className: 'dw7-small', onClick: () => void copyPatch() }, copied ? t('copied') : t('copy_patch')),
                 copyNote ? h('span', { className: 'dw7-error' }, copyNote) : null),
               h('pre', { className: 'dw7-code' }, patch))
             : null
-          return h('section', { className: 'dw7-status' },
+          const body = fallback
+            ? h('p', { className: 'dw7-report', key: 'report' }, report)
+            : h('div', { className: 'dw7-status-body', key: 'body' },
+              h('p', { className: 'dw7-status-lead' }, view.lead),
+              h('dl', { className: 'dw7-facts' },
+                h('div', { key: 'status' },
+                  h('dt', null, t('status_row_status')),
+                  h('dd', null, view.status)),
+                h('div', { key: 'runtime' },
+                  h('dt', null, t('status_row_runtime')),
+                  h('dd', null, view.runtime)),
+                h('div', { key: 'path' },
+                  h('dt', null, t('status_row_path')),
+                  h('dd', null, path ?? t('status_no_path')))),
+              h('p', { className: 'dw7-status-note' }, view.note))
+          return h('section', { className: 'dw7-detail' },
             h('style', null, CSS),
-            h('div', { className: 'dw7-status-head' },
-              h('strong', { className: 'dw7-status-title' }, t('diagnostics_title')),
-              snap.at ? h('span', { className: 'dw7-status-metric' }, t('refreshed_at', { at: snap.at })) : null,
-              h('button', {
-                className: 'dw7-small dw7-status-action',
-                onClick: () => void refresh(),
-                disabled: snap.state === 'loading',
-              }, snap.state === 'loading' ? t('redetecting') : t('redetect'))),
-            fallback
-              ? h('p', { className: 'dw7-report' }, report)
-              : h('div', { className: 'dw7-estimate' },
-                h('p', null, view.lead),
-                h('dl', { className: 'dw7-facts' },
-                  h('div', { key: 'status' },
-                    h('dt', null, t('status_row_status')),
-                    h('dd', null, view.status)),
-                  h('div', { key: 'runtime' },
-                    h('dt', null, t('status_row_runtime')),
-                    h('dd', null, view.runtime)),
-                  h('div', { key: 'path' },
-                    h('dt', null, t('status_row_path')),
-                    h('dd', null, path ?? t('status_no_path')))),
-                h('small', { className: 'dw7-note' }, view.note)),
-            patchBlock,
-            snap.error !== null ? h('p', { className: 'dw7-error' }, t('status_error', { error: snap.error })) : null,
+            h('div', { className: 'dw7-status-card' },
+              h('div', { className: 'dw7-detail-head' },
+                h('h3', { className: 'dw7-detail-title' }, t('diagnostics_title')),
+                snap.at ? h('span', { className: 'dw7-detail-metric' }, t('refreshed_at', { at: snap.at })) : null,
+                h('button', {
+                  type: 'button',
+                  className: 'dw7-small dw7-detail-action',
+                  onClick: () => void refresh(),
+                  disabled: snap.state === 'loading',
+                }, snap.state === 'loading' ? t('redetecting') : t('redetect'))),
+              body,
+              patchBlock,
+              snap.error !== null ? h('p', { className: 'dw7-error' }, t('status_error', { error: snap.error })) : null),
           )
         }
 
@@ -455,35 +476,45 @@ window.__ModuleLoader__.load({
             }
           }
 
-          return h('section', { className: 'dw7-section' },
+          return h('form', {
+            className: 'dw7-settings',
+            onSubmit: (event) => {
+              event.preventDefault()
+              void save()
+            },
+          },
             h('style', null, CSS),
-            h('div', { className: 'dw7-head' },
-              h('h4', { className: 'dw7-title' }, t('card_title'))),
             loading || unavailable
-              ? h('p', { className: 'dw7-empty' }, loading ? t('form_loading') : t('form_unavailable'))
+              ? h('p', { className: 'dw7-note' }, loading ? t('form_loading') : t('form_unavailable'))
               : [
-                h('div', { className: 'dw7-field', key: 'overridePath' },
-                  h('label', { className: 'dw7-label', htmlFor: 'dw7-override-path' }, t('field_overridePath')),
-                  h('input', {
-                    id: 'dw7-override-path',
-                    className: 'dw7-input',
-                    type: 'text',
-                    spellCheck: false,
-                    value: values.overridePath,
-                    disabled: !editable,
-                    placeholder: 'C:\\Program Files\\PowerShell\\7\\pwsh.exe',
-                    onChange: (event) => {
-                      setDraft({ ...values, overridePath: event.target.value })
-                      setNote(null)
-                      setSavedAt(null)
-                    },
-                  }),
-                  h('p', { className: 'dw7-hint' }, t('overridePath_hint'))),
-                h('div', { className: 'dw7-field', key: 'dshOpsCompat' },
-                  h('div', { className: 'dw7-switch-row' },
-                    h('div', { className: 'dw7-switch-text' },
-                      h('div', { className: 'dw7-label' }, t('field_dshOpsCompat')),
-                      h('p', { className: 'dw7-hint' }, t('dshOpsCompat_hint'))),
+                h('section', { className: 'dw7-group dw7-card', key: 'executor' },
+                  h('div', { className: 'dw7-group-head' },
+                    h('div', { className: 'dw7-field-text' },
+                      h('h4', { className: 'dw7-group-title' }, t('executor_title')),
+                      h('p', { className: 'dw7-field-hint' }, t('executor_hint')))),
+                  h('div', { className: 'dw7-card-body' },
+                    h('div', { className: 'dw7-field' },
+                      h('label', { className: 'dw7-field-label', htmlFor: 'dw7-override-path' }, t('field_overridePath')),
+                      h('input', {
+                        id: 'dw7-override-path',
+                        className: 'dw7-input',
+                        type: 'text',
+                        spellCheck: false,
+                        value: values.overridePath,
+                        disabled: !editable,
+                        placeholder: 'C:\\Program Files\\PowerShell\\7\\pwsh.exe',
+                        onChange: (event) => {
+                          setDraft({ ...values, overridePath: event.target.value })
+                          setNote(null)
+                          setSavedAt(null)
+                        },
+                      }),
+                      h('p', { className: 'dw7-field-hint' }, t('overridePath_hint'))))),
+                h('section', { className: 'dw7-group dw7-card', key: 'compat' },
+                  h('div', { className: 'dw7-group-head' },
+                    h('div', { className: 'dw7-field-text' },
+                      h('h4', { className: 'dw7-group-title' }, t('field_dshOpsCompat')),
+                      h('p', { className: 'dw7-field-hint' }, t('dshOpsCompat_hint'))),
                     h(Switch, {
                       checked: values.dshOpsCompat,
                       disabled: !editable,
@@ -496,11 +527,12 @@ window.__ModuleLoader__.load({
                     }))),
                 h('div', { className: 'dw7-actions', key: 'actions' },
                   h('button', {
+                    type: 'submit',
                     className: 'dw7-save',
-                    onClick: () => void save(),
                     disabled: !editable || (!dirty && note === null),
                   }, t('save')),
                   h('button', {
+                    type: 'button',
                     className: 'dw7-reset',
                     onClick: () => {
                       setDraft(null)
