@@ -154,6 +154,18 @@ After the Host ships the same fix, delete the layer whole:
 
 Acceptance: `grep -rn "utf8-console-bridge\|utf8Console" index.js lib tools` returns nothing.
 
+### Deciding that the Host has fixed it
+
+Either signal is enough to start removing the layer:
+
+- `@deepseek-ai/dsh-pwsh-local`'s own `ENCODING_PREAMBLE` includes the `chcp.com 65001` switch
+  (check `packages/shell/pwsh-local/src/index.ts` upstream, or `lib/index.js` in the installed
+  package);
+- with this plugin absent or `utf8Console` off, a nested `pwsh -File` under a CP936 console already
+  prints UTF-8.
+
+Re-run the nested script in a real CP936 environment before deleting.
+
 ## Disable or uninstall
 
 Disabling the plugin removes the `pwsh` gate and the plugin page; it does not uninstall PowerShell 7.

@@ -378,6 +378,8 @@ export function apply(ctx, config) {
 
   ctx.effect(() => mountDshOpsBridge(ctx, current), 'dsh-win-pwsh7: hide duplicate official tools while dsh-ops is compatible')
 
+  // Transitional, removable: delete this mount and lib/utf8-console-bridge.js once the Host
+  // pins the console code page itself. The README records the removal contract.
   ctx.effect(() => mountUtf8ConsoleBridge(ctx, current), 'dsh-win-pwsh7: pin the Windows console code page for pwsh output')
 
   ctx.effect(() => {

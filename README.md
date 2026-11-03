@@ -126,6 +126,16 @@ DSH 的 `pwsh` 工具按 UTF-8 解码输出，但命令里再启动的 `pwsh -Fi
 
 验收：`grep -rn "utf8-console-bridge\|utf8Console" index.js lib tools` 无结果。
 
+### 判定上游已修复
+
+满足任一条件即可开始删除：
+
+- `@deepseek-ai/dsh-pwsh-local` 的 `ENCODING_PREAMBLE` 自己包含 `chcp.com 65001`（可查上游
+  `packages/shell/pwsh-local/src/index.ts`，或安装包里的 `lib/index.js`）；
+- 在 CP936 控制台下，不装/关闭本插件时，命令里嵌套的 `pwsh -File` 已经输出 UTF-8。
+
+删除前先在真实的 CP936 环境复跑一遍嵌套脚本，确认不再需要这层。
+
 ## 禁用或卸载
 
 禁用插件只移除 `pwsh` 的 gate 和插件页，不会卸载 PowerShell 7。只要机器上仍有 `pwsh.exe`，默认执行器仍会优先运行它（通常是 Store 版 PowerShell 7）；只有找不到 `pwsh.exe` 时才回退到 Windows PowerShell 5.1。要真正回到 5.1，需要卸载 Store 版或把执行器 pin 到 `powershell.exe`，不推荐这样做。
