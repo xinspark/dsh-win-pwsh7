@@ -51,6 +51,7 @@ import {
   mountDshOpsBridge,
   removeDshOpsCompatPatch,
 } from './lib/dsh-ops-bridge.js'
+import { mountUtf8ConsoleBridge } from './lib/utf8-console-bridge.js'
 
 export const name = 'dsh-win-pwsh7'
 export const inject = ['subprocess', 'tools', 'configEditor', 'systemPrompt']
@@ -70,6 +71,9 @@ export const Config = z.object({
   // Default-on after the multi-session validation of the pre-restriction bridge. Turning it
   // off removes the managed compatibility override; turning it on restores it.
   dshOpsCompat: z.boolean().default(true).volatile(),
+  // Transitional Windows console code page fix, owned by lib/utf8-console-bridge.js.
+  // Delete this field together with the bridge and its mount (see README removal contract).
+  utf8Console: z.boolean().default(true).volatile(),
 })
 
 /**
@@ -373,6 +377,8 @@ export function apply(ctx, config) {
   }, 'dsh-win-pwsh7: manage the dsh-ops compatibility patch')
 
   ctx.effect(() => mountDshOpsBridge(ctx, current), 'dsh-win-pwsh7: hide duplicate official tools while dsh-ops is compatible')
+
+  ctx.effect(() => mountUtf8ConsoleBridge(ctx, current), 'dsh-win-pwsh7: pin the Windows console code page for pwsh output')
 
   ctx.effect(() => {
     void activationSweep(ctx, current()).then((report) => {

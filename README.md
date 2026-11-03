@@ -36,7 +36,7 @@
 
 ```powershell
 # 从 GitHub 安装（推荐锁定 tag）
-dsh plugin --profile desktop add github:XinSpark/dsh-win-pwsh7#v0.2.4
+dsh plugin --profile desktop add github:XinSpark/dsh-win-pwsh7#v0.2.5
 # 或 npm
 dsh plugin --profile desktop add dsh-win-pwsh7
 ```
@@ -70,6 +70,7 @@ dsh plugin --profile desktop add dsh-win-pwsh7
 |---|---|---|
 | `overridePath` | 未设 | 优先级①的显式 `pwsh.exe`。必须能启动并报告 PowerShell 7+；未通过校验就回落到自动探测。**只影响探测与推荐，不接线**。 |
 | `dshOpsCompat` | `true` | 与 dsh-ops 共存（默认开启）：自动写入并启用兼容模式，隐藏重复的官方工具，保留 `pwsh` + `ops_bash`。需要重启。 |
+| `utf8Console` | `true` | 过渡层：Windows 下给 `pwsh` 工具的每条命令前加 `chcp.com 65001`，避免嵌套 `pwsh -File` 按 936 输出 GBK 后被按 UTF-8 解码成乱码。宿主修复后可删除。 |
 
 `overridePath` 是 `volatile()`：插件页配置区保存即生效；也可以写进 profile 补丁：
 
@@ -107,6 +108,24 @@ The executor resolves to the version-stable Store family alias: … Nothing to c
 
 插件页的状态区是原生卡片，显示状态、运行时和执行器路径，右上角有「重新检测」；配置区有 `overridePath` 和默认开启的「与 dsh-ops 共存」原生开关。
 
+## Windows UTF-8 控制台（过渡层）
+
+DSH 的 `pwsh` 工具按 UTF-8 解码输出，但命令里再启动的 `pwsh -File` / `powershell -File` 会继承**控制台代码页**（简体中文机器通常是 936），输出 GBK，最终显示为 `�`。宿主的前缀只固定了外层进程的 .NET 编码，没有改控制台代码页。
+
+0.2.5 增加一个过渡层：包装 `pwsh` 工具使用的 `ctx.shell.execute`，在 Windows 上给每条命令前加 `chcp.com 65001 > $null;`。它只影响装了本插件的用户；默认开启，可用 `utf8Console: false` 关闭；宿主接口形状不符时 fail-open，不影响 `pwsh` 工具本身。
+
+### 删除契约
+
+宿主发布同样的修复后，按这五步整块删除：
+
+1. 删 `lib/utf8-console-bridge.js`；
+2. 删 `index.js` 的 import 和 `mountUtf8ConsoleBridge(ctx, current)` 调用；
+3. 删 `Config.utf8Console`；
+4. 删 `tools/check-utf8-bridge.mjs`，并从 `package.json` 的 `check` 链里移除；
+5. 删本节和 CHANGELOG 里的 0.2.5 过渡说明。
+
+验收：`grep -rn "utf8-console-bridge\|utf8Console" index.js lib tools` 无结果。
+
 ## 禁用或卸载
 
 禁用插件只移除 `pwsh` 的 gate 和插件页，不会卸载 PowerShell 7。只要机器上仍有 `pwsh.exe`，默认执行器仍会优先运行它（通常是 Store 版 PowerShell 7）；只有找不到 `pwsh.exe` 时才回退到 Windows PowerShell 5.1。要真正回到 5.1，需要卸载 Store 版或把执行器 pin 到 `powershell.exe`，不推荐这样做。
@@ -118,6 +137,7 @@ The executor resolves to the version-stable Store family alias: … Nothing to c
 | Store 页面打开但没有「安装」按钮 | 确认 VPN 已关闭，完全退出并重启 Microsoft Store 后重试；或改用手动安装。 |
 | `pwsh` 仍运行 5.1 | 运行 `pwsh7_status`，按报告把 `pwshPath` 补丁粘进 profile 并重启；或安装 Store 版。 |
 | 插件页看不到 | 确认当前 profile 已启用 `dsh-win-pwsh7`，然后重启 DSH。 |
+| 命令里嵌套 `pwsh` 时中文变 `�` | 0.2.5 默认已由 `utf8Console` 过渡层处理；若手动关掉，重新开启，或在命令前加 `chcp.com 65001 > $null;`。 |
 
 ## 验证
 
@@ -125,17 +145,18 @@ The executor resolves to the version-stable Store family alias: … Nothing to c
 $env:DSH_APP_DIR = 'E:\FXS\APP\DSH NEXT\resources\app.asar'
 node tools/check-host.mjs
 node tools/check-client.mjs
+node tools/check-utf8-bridge.mjs
 node tools/check-native-contracts.mjs
 ```
 
-三套门都可以在打包安装（`resources/app.asar`）上离线复跑；`DSH_APP_DIR` 接安装根目录、`resources/app` 或 `resources/app.asar`。
+四套门都可以在打包安装（`resources/app.asar`）上离线复跑；`DSH_APP_DIR` 接安装根目录、`resources/app` 或 `resources/app.asar`。
 
 ## 设计约束
 
 - 判定读执行器自己的 `ctx.shell.pwshPath`，不是扫配置行；`overridePath` 只影响探测与推荐。
 - 不做 VPN 自动检测、不做计量连接预检；VPN 由用户在安装前确认，页面加载失败时再提示。
 - 不自动重试；连续失败由熔断终止。
-- 提交前跑三套门；端到端安装是发布证据，不是自动化门的一部分。
+- 提交前跑四套门；端到端安装是发布证据，不是自动化门的一部分。
 
 ## License
 

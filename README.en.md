@@ -44,7 +44,7 @@ multi-session validation passed, so the switch is default-on again.
 ## Install this plugin
 
 ```powershell
-dsh plugin --profile desktop add github:XinSpark/dsh-win-pwsh7#v0.2.4
+dsh plugin --profile desktop add github:XinSpark/dsh-win-pwsh7#v0.2.5
 # or
 dsh plugin --profile desktop add dsh-win-pwsh7
 ```
@@ -83,6 +83,7 @@ The count lives in the current process and resets when DSH restarts.
 |---|---|---|
 | `overridePath` | unset | Priority ① explicit `pwsh.exe`. It must spawn and report PowerShell 7+; a failed validation falls back to auto-detection. **It only changes probing and recommendations, not executor wiring.** |
 | `dshOpsCompat` | `true` | Coexist with dsh-ops (on by default): writes and enables its Compatibility mode, hides duplicate official tools, and keeps `pwsh` + `ops_bash`. Requires a restart. |
+| `utf8Console` | `true` | Transitional: prefixes every `pwsh` tool command with `chcp.com 65001` on Windows, so a nested `pwsh -File` cannot emit GBK under code page 936 and be decoded as UTF-8. Removable once the Host ships the same fix. |
 
 `overridePath` is `volatile()`: the plugin-page configuration section saves it live; it can also be
 set in the profile patch:
@@ -129,6 +130,30 @@ The status section is a native card showing the state, runtime and executor path
 at the top right; the configuration section exposes `overridePath` and the default-on "Keep native
 pwsh alongside dsh-ops" native switch.
 
+## Windows UTF-8 console (transitional)
+
+The Host collector decodes `pwsh` output as UTF-8, but a `pwsh -File` / `powershell -File` started
+inside a tool command inherits the **console code page** (936 on a Simplified Chinese machine) and
+emits GBK, which then renders as `�`. The Host preamble pins the outer process's .NET encoding, not
+the console code page.
+
+0.2.5 adds a transitional layer: it wraps the same `ctx.shell.execute` the `pwsh` tool uses and
+prefixes every Windows command with `chcp.com 65001 > $null;`. It affects only this plugin's users,
+is on by default, can be disabled with `utf8Console: false`, and fails open when the Host shape
+does not match.
+
+### Removal contract
+
+After the Host ships the same fix, delete the layer whole:
+
+1. delete `lib/utf8-console-bridge.js`;
+2. delete the import and `mountUtf8ConsoleBridge(ctx, current)` call in `index.js`;
+3. delete `Config.utf8Console`;
+4. delete `tools/check-utf8-bridge.mjs` and its entry in the `package.json` `check` chain;
+5. delete this section and the 0.2.5 transitional note in CHANGELOG.
+
+Acceptance: `grep -rn "utf8-console-bridge\|utf8Console" index.js lib tools` returns nothing.
+
 ## Disable or uninstall
 
 Disabling the plugin removes the `pwsh` gate and the plugin page; it does not uninstall PowerShell 7.
@@ -143,6 +168,7 @@ to 5.1, uninstall the Store build or pin the executor to `powershell.exe` (not r
 | The Store page opens without an Install button | Confirm the VPN is off, fully quit and restart Microsoft Store, then retry; or use the manual path. |
 | `pwsh` still runs 5.1 | Run `pwsh7_status`, paste the reported `pwshPath` patch into the profile, and restart; or install the Store build. |
 | The plugin page is missing | Confirm `dsh-win-pwsh7` is enabled in the current profile, then restart DSH. |
+| Chinese turns into `�` when a command nests `pwsh` | 0.2.5 handles it through `utf8Console`; if you disabled it, turn it back on or prefix the command with `chcp.com 65001 > $null;`. |
 
 ## Verification
 
@@ -150,10 +176,11 @@ to 5.1, uninstall the Store build or pin the executor to `powershell.exe` (not r
 $env:DSH_APP_DIR = 'E:\FXS\APP\DSH NEXT\resources\app.asar'
 node tools/check-host.mjs
 node tools/check-client.mjs
+node tools/check-utf8-bridge.mjs
 node tools/check-native-contracts.mjs
 ```
 
-All three gates run offline against a packed installation (`resources/app.asar`); `DSH_APP_DIR`
+All four gates run offline against a packed installation (`resources/app.asar`); `DSH_APP_DIR`
 accepts the install root, `resources/app`, or `resources/app.asar`.
 
 ## Design constraints
@@ -163,7 +190,7 @@ accepts the install root, `resources/app`, or `resources/app.asar`.
 - No VPN auto-detection and no metered-connection preflight: the user confirms the VPN before an
   install, and a page-load failure asks again.
 - No automatic retries; the three-failure breaker ends the loop.
-- Run all three gates before publishing; end-to-end installation is release evidence, not part of
+- Run all four gates before publishing; end-to-end installation is release evidence, not part of
   the automated gate.
 
 ## License

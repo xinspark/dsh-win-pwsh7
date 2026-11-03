@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.2.5 — transitional Windows UTF-8 console bridge
+
+- Added `lib/utf8-console-bridge.js`, a removable layer that wraps the same `ctx.shell.execute`
+  the `pwsh` tool uses and prefixes Windows commands with `chcp.com 65001 > $null;`. A nested
+  `pwsh -File` / `powershell -File` otherwise inherits the console code page (936 on a Simplified
+  Chinese machine) and emits GBK, which the Host collector decodes as UTF-8 and renders as U+FFFD.
+- `utf8Console` (default `true`) gates the layer. It fails open when the shell service, the
+  executor shape or the config reader is unavailable, and restores the original executor when the
+  plugin unloads. No tool, prompt, install or gate behavior changed.
+- `tools/check-utf8-bridge.mjs` covers the prefix, opt-out, idempotence, restore and fail-open paths
+  with a fake executor; it runs in the `check` chain.
+- Removal contract: delete `lib/utf8-console-bridge.js`, its import and mount in `index.js`, the
+  `utf8Console` config field, the bridge gate and its `check` entry, plus the README section and
+  this note. The README records the exact steps and the `grep` acceptance check.
+
 ## 0.2.4 — plugin page aligned with the dsh-ops card language
 
 - Restyled both contributions after the installed dsh-ops 0.5.0 branch: a 0.5px hairline card on
