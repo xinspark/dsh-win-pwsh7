@@ -539,12 +539,14 @@ function readRowConfig(ctx, fallback) {
   const merged = {
     overridePath: typeof fallback?.overridePath === 'string' ? fallback.overridePath : undefined,
     dshOpsCompat: fallback?.dshOpsCompat !== false,
+    utf8Console: fallback?.utf8Console !== false,
   }
   try {
     const entry = ctx.configEditor.entries().find((candidate) => candidate?.options?.name === 'dsh-win-pwsh7')
     const values = entry?.options?.config
     if (isSet(values?.overridePath)) merged.overridePath = String(values.overridePath)
     if (values?.dshOpsCompat !== undefined) merged.dshOpsCompat = values.dshOpsCompat !== false
+    if (values?.utf8Console !== undefined) merged.utf8Console = values.utf8Console !== false
   } catch { /* fall back to the captured config */ }
   return merged
 }
