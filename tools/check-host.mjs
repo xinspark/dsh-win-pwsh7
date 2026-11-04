@@ -830,6 +830,27 @@ check('client copy: every t() key is defined in both dictionaries', () => {
   }
 })
 
+// --- Manifest: the DSH range must not end at the next prerelease ---------------------------
+//
+// 0.2.5 declared `>=0.2.1-rc.3 <0.2.2-0` and the desktop moved to 0.2.2-rc.1: the loader skips a
+// bundle whose `engines.dsh` the running build does not satisfy, prints nothing, and the whole
+// plugin disappears (no tools, no gate, no UTF-8 bridge) until a new release ships. DSH patches
+// arrive as prereleases, so a bound on the next patch's prerelease is a bound on "the next DSH
+// update". The range therefore ends at the next minor: `<X.<minor+1>.0-0`.
+
+check('engines.dsh ends at the next minor, not at the next prerelease', () => {
+  const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
+  const [major, minor] = manifest.dsh.verifiedAgainst.split('.').map((part) => Number.parseInt(part, 10))
+  const terms = manifest.engines.dsh.trim().split(/\s+/u)
+  const upper = terms.find((term) => term.startsWith('<'))
+  assert.equal(
+    upper,
+    `<${major}.${minor + 1}.0-0`,
+    'a `<X.Y.Z-0` bound on the next patch prerelease makes the loader skip this bundle after the next DSH release',
+  )
+  assert.ok(terms.some((term) => term.startsWith('>=')), 'the range needs a lower bound')
+})
+
 // --- Verdict -----------------------------------------------------------------------------
 
 if (failures.length > 0) {

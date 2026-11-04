@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.2.6 — loads on DSH 0.2.2-rc.1 again
+
+- **The plugin had gone silently inert on the 0.2.2 desktop build.** 0.2.5 declared
+  `engines.dsh: ">=0.2.1-rc.3 <0.2.2-0"`. The loader skips a bundle whose range the running build
+  does not satisfy, prints nothing, and reports it only as an entry in `skippedBundles`, so on
+  DSH 0.2.2-rc.1 both tools, the guard, the page and the UTF-8 console bridge were absent. The
+  only visible trace was `patch: entry "win-pwsh7" not found` on every recomposition, because the
+  bundle patch that inserts that row never applied.
+- `engines.dsh` is now `>=0.2.1-rc.3 <0.3.0-0` and `dsh.verifiedAgainst` is `0.2.2-rc.1`. The
+  upper bound follows the **minor** line: DSH ships fixes as prereleases of the next patch, so a
+  bound on the next patch's prerelease is a bound on "the next DSH update".
+- `tools/check-host.mjs` now fails when the range ends at a patch prerelease
+  (`<X.Y.Z-0`) instead of `<X.<minor+1>.0-0`; the check was mutation-tested by restoring the old
+  range (red) and putting the new one back (green).
+- `tools/check-native-contracts.mjs` follows the 0.2.2 split of `dsh-tools`: it accepts
+  `checkGuards` (0.2.2) or `guardReason` (0.2.1), reads the `Error: <reason>` materialization from
+  `lib/pipeline.js` when that file exists, asserts the pre-execute waterfall still runs **before**
+  the guards, and drops `ToolRuntime.prepareExecution` (removed upstream; this plugin never used it).
+  Green on 0.2.2-rc.1 in 37 checks.
+- `docs/native-contracts.md` records the new baseline, the per-package delta from 0.2.1-rc.4 and
+  the new guard symbols. `dsh-tool-pwsh` is byte-identical; `dsh-pwsh-local` only adds
+  `PYTHONIOENCODING: utf-8`, so `ENCODING_PREAMBLE` still carries no `chcp` and the UTF-8 bridge
+  stays.
+- No tool, prompt, install, gate or page behavior changed.
+
 ## 0.2.5 — transitional Windows UTF-8 console bridge
 
 - Added `lib/utf8-console-bridge.js`, a removable layer that wraps the same `ctx.shell.execute`

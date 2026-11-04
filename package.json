@@ -1,10 +1,10 @@
 {
   "name": "dsh-win-pwsh7",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "type": "module",
   "description": "Detect and validate PowerShell 7 for the Harness pwsh tool on Windows, and install it on request through the Microsoft Store — scripted or manual — while the pwsh tool stays blocked until a PowerShell 7 runtime actually resolves.",
   "engines": {
-    "dsh": ">=0.2.1-rc.3 <0.2.2-0"
+    "dsh": ">=0.2.1-rc.3 <0.3.0-0"
   },
   "license": "MIT",
   "icon": "./icon.svg",
@@ -57,7 +57,7 @@
     "prepublishOnly": "npm run check"
   },
   "dsh": {
-    "verifiedAgainst": "0.2.1-rc.3",
+    "verifiedAgainst": "0.2.2-rc.1",
     "bundle": {
       "patch": "./cordis.patch.yml"
     },

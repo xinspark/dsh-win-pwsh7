@@ -18,7 +18,10 @@ default executor then chooses the runtime itself, and the plugin still never wri
 ## Verified environment
 
 - Windows 10/11.
-- Verified on DSH **0.2.1-rc.3** (see `dsh.verifiedAgainst` in `package.json`).
+- Verified on DSH **0.2.2-rc.1** (see `dsh.verifiedAgainst` in `package.json`).
+- Supported range: `>=0.2.1-rc.3 <0.3.0-0`. Ending the range at the next prerelease makes the
+  loader skip this bundle silently after every DSH patch release (no tools, no gate, no UTF-8
+  bridge), so the upper bound follows the **minor** line.
 - The script path needs Microsoft Store; the manual path only needs the Store page.
 - No administrator rights are required.
 
@@ -44,7 +47,7 @@ multi-session validation passed, so the switch is default-on again.
 ## Install this plugin
 
 ```powershell
-dsh plugin --profile desktop add github:XinSpark/dsh-win-pwsh7#v0.2.5
+dsh plugin --profile desktop add github:XinSpark/dsh-win-pwsh7#v0.2.6
 # or
 dsh plugin --profile desktop add dsh-win-pwsh7
 ```

@@ -72,6 +72,32 @@ function source(name) {
   throw new Error(`${name}: neither lib/types/index.js nor lib/index.js exists`)
 }
 
+/**
+ * Read one named file of an installed package, or '' when the build does not have it.
+ *
+ * A contract can move between files without being lost: 0.2.2 moved the tool pipeline out of
+ * `lib/index.js` into `lib/pipeline.js`. Reading a fixed list and joining what exists keeps the
+ * assertion on the behavior when the file split changes, instead of on a remembered path.
+ */
+function trySource(name, relative) {
+  try {
+    return readFileSync(join(packageDir(name), relative), 'utf8')
+  } catch {
+    return ''
+  }
+}
+
+/** The tool pipeline: one file up to 0.2.1, split into `lib/pipeline.js` from 0.2.2. */
+function pipeline() {
+  return ['lib/index.js', 'lib/pipeline.js'].map((relative) => trySource('dsh-tools', relative)).join('\n')
+}
+
+/** The single file that hosts the pre-execute waterfall in this build. */
+function pipelineFile() {
+  const split = trySource('dsh-tools', 'lib/pipeline.js')
+  return split === '' ? trySource('dsh-tools', 'lib/index.js') : split
+}
+
 let checks = 0
 /** One assertion with a stable label for the summary. */
 function check(label, assertion) {
@@ -109,11 +135,30 @@ async function run() {
 
   // ---- tool registry: guard is global, monotonic, and lands as an error --
   check('defineTool is exported', () => assert.equal(typeof tools.defineTool, 'function'))
-  for (const method of ['guard', 'guardReason', 'restrict', 'prepareExecution', 'execute']) {
+  for (const method of ['guard', 'restrict', 'execute']) {
     check(`ToolRuntime.${method} exists`, () => assert.equal(typeof tools.ToolRuntime.prototype[method], 'function'))
   }
-  check('guard denial is materialized as `Error: <reason>`', () => {
-    assert.match(source('dsh-tools'), /Error: \$\{denialReason\}/u)
+  // 0.2.1 read guards in `guardReason`; 0.2.2 renamed it `checkGuards` and moved the one who
+  // materializes the denial into `lib/pipeline.js`. The plugin only needs "guards are still read
+  // once, after pre-execute, and the reason reaches the model" — not a particular private name.
+  const GUARD_READERS = ['checkGuards', 'guardReason']
+  const guardReader = GUARD_READERS.find((name) => typeof tools.ToolRuntime.prototype[name] === 'function')
+  check('ToolRuntime reads its guards through one method', () => {
+    assert.ok(
+      guardReader !== undefined,
+      `neither ${GUARD_READERS.join(' nor ')} exists — the gate cannot tell whether guards still deny`,
+    )
+  })
+  check('a guard denial is materialized as `Error: <reason>`', () => {
+    assert.match(pipeline(), /Error: \$\{denialReason\}/u)
+    assert.ok(pipeline().includes(`.${guardReader}(`), `the denial pipeline never calls ${guardReader}`)
+  })
+  check('guards are read after the pre-execute waterfall', () => {
+    const text = pipelineFile()
+    const waterfall = text.search(/tools\/pre-execute/u)
+    const read = text.search(new RegExp(`${guardReader}\\(`, 'u'))
+    assert.ok(waterfall >= 0, 'the pre-execute waterfall is gone; the gate cannot be refreshed before a pwsh call')
+    assert.ok(read > waterfall, 'guards run before the pre-execute waterfall, so a stale reading would decide the call')
   })
   check('restrict refuses a plain-context caller', () => {
     assert.match(source('dsh-tools'), /tools\.restrict\(\) requires a scoped context/u)
