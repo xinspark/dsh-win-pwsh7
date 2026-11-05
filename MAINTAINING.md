@@ -83,7 +83,12 @@ DSH 验证，`client.js` 里的界面字典刷新页面即可。
 
 ## 7. 当前状态（事实）
 
-- 最新发布：npm `0.2.7`（2026-11-05），对应 tag `v0.2.7`；
-- 工作区版本 `0.2.7`（已发布）：文档分层 + 详情页求星行 + 8 语言适配；五套门全绿（含 native 38 项）；实例已激活，实时 Slots 为 diagnostics(50) → star(80) → market source(90)；
+- 最新发布：npm `0.2.7`（2026-11-05），`dist-tags.latest = 0.2.7`，`gitHead = 05b59ae`，带 SLSA provenance；
+- GitHub：tag `v0.2.7` → `05b59ae`；Release <https://github.com/XinSpark/dsh-win-pwsh7/releases/tag/v0.2.7>；
+  Actions run `42056823785` success（tag 校验、client/docs 门、`npm pack --dry-run`、`npm publish --provenance`）；
+- 工作区版本 `0.2.7`（已发布）：文档分层 + 详情页求星行 + 8 语言适配；五套门全绿（含 native 38 项）；
+  实例已激活，实时 Slots 为 diagnostics(50) → star(80) → market source(90)；
+- 本机 profile 使用 `file:E:/FXS/Data/DSH-Dev/plugins/dsh-win-pwsh7/main/dsh-win-pwsh7-0.2.7.tgz`
+  的真实目录安装（不是 link），插件已激活；
 - 两个过渡层的上游跟踪 issue：UTF-8 控制台桥（#1）、dsh-ops 兼容桥（#2），移除条件见
   [设计说明](docs/design.md) 与 README。

@@ -45,7 +45,7 @@ node tools/check-docs.mjs
 | 版本 | 内核 | 自动化 | 实机 | 记录 |
 | --- | --- | --- | --- | --- |
 | 0.2.6 | 2.0.22-next / 0.2.2-rc.1 | 四套门全绿（native 37 项） | 发版前本机复跑 | `CHANGELOG.md` 0.2.6 |
-| 0.2.7 | 2.0.22-next / 0.2.2-rc.1 | 五套门全绿（native 38 项；文档 22 篇） | 插件已激活；`pwsh7_status` 可用；实时 Slots: diagnostics(50) → star(80) → market source(90) | 本节 + `CHANGELOG.md` 0.2.7 |
+| 0.2.7 | 2.0.22-next / 0.2.2-rc.1 | 五套门全绿（native 38 项；文档 22 篇） | 插件已激活；`pwsh7_status` 可用；实时 Slots: diagnostics(50) → star(80) → market source(90) | [Release v0.2.7](https://github.com/XinSpark/dsh-win-pwsh7/releases/tag/v0.2.7) + `CHANGELOG.md` 0.2.7 |
 
 ## 说明
 
