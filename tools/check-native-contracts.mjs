@@ -9,8 +9,8 @@
  *
  * This gate therefore imports the installed packages and asserts the exact symbols, prototypes and
  * source-level contracts the plugin relies on. It is deliberately coupled to the running build:
- * line numbers move, so the assertions name symbols and behaviors, and `docs/native-contracts.md`
- * records the build they were taken from.
+ * line numbers move, so the assertions name symbols and behaviors, and
+ * `docs/reference/native-contracts.md` records the build they were taken from.
  *
  * `DSH_APP_DIR` is resolved exactly like the Host gate (install root, `resources/app`, or
  * `resources/app.asar`). A machine with no installation fails with one actionable line instead of a
@@ -181,6 +181,17 @@ async function run() {
     assert.match(text, /resolvedPwshPath/u)
   })
   check('PwshLocalExecutor.argv exists', () => assert.equal(typeof pwshLocal.PwshLocalExecutor.prototype.argv, 'function'))
+  // The transitional UTF-8 console bridge is removable when upstream pins the console code page
+  // itself. This check is deliberately red on that fix: red is the signal to follow the README
+  // removal contract, not to relax the assertion.
+  check('dsh-pwsh-local pins only .NET output encoding, not the console code page', () => {
+    const preamble = pwshLocal.ENCODING_PREAMBLE
+    assert.equal(typeof preamble, 'string', 'ENCODING_PREAMBLE disappeared; re-read the encoding contract')
+    assert.ok(
+      !/chcp(?:\.com)?\s+65001|SetConsoleOutputCP/iu.test(preamble),
+      'upstream now pins the console code page: remove lib/utf8-console-bridge.js per the README removal contract',
+    )
+  })
 
   // ---- resolver: a configured path is trusted as-is ----------------------
   check('resolvePwshPath trusts an explicit configured path', () => {

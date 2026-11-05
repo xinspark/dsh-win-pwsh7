@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "PowerShell 7 pour Windows",
+    "description": "Détecte et valide PowerShell 7 pour l'outil pwsh de Harness sous Windows, et l'installe sur demande via le Microsoft Store — par script ou manuellement. L'outil pwsh reste bloqué tant qu'un runtime PowerShell 7 n'est pas réellement résolu."
+  }
+}

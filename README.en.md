@@ -25,6 +25,10 @@ default executor then chooses the runtime itself, and the plugin still never wri
 - The script path needs Microsoft Store; the manual path only needs the Store page.
 - No administrator rights are required.
 
+Full documentation (Chinese) starts at [docs/README.md](docs/README.md); private maintainer material
+is not published. Relative documentation links may 404 on the npm package page — treat the GitHub
+repository as the source of truth.
+
 ## What it does not do
 
 - It does not install anything at startup.
@@ -47,7 +51,7 @@ multi-session validation passed, so the switch is default-on again.
 ## Install this plugin
 
 ```powershell
-dsh plugin --profile desktop add github:XinSpark/dsh-win-pwsh7#v0.2.6
+dsh plugin --profile desktop add github:XinSpark/dsh-win-pwsh7#v0.2.7
 # or
 dsh plugin --profile desktop add dsh-win-pwsh7
 ```
@@ -131,7 +135,23 @@ executor / disable the plugin.
 
 The status section is a native card showing the state, runtime and executor path, with Re-detect
 at the top right; the configuration section exposes `overridePath` and the default-on "Keep native
-pwsh alongside dsh-ops" native switch.
+pwsh alongside dsh-ops" native switch. The page ends with a one-line star request below the status
+card (`⭐` in the localized copy); it adds no repository link because the footer already has one.
+
+## Languages
+
+All plugin-owned copy follows the eight official DSH languages (zh / en / ja / de / es / fr / pt / ru)
+live. The UI dictionaries live in `client.js` (`DICT_ZH` / `DICT_EN` / `DICT_JA` / `DICT_DE` /
+`DICT_ES` / `DICT_FR` / `DICT_PT` / `DICT_RU`); the package title and description live in
+`locale/*.json`, one file per language.
+
+- Chinese and English are hand-written; **ja / de / es / fr / pt / ru are machine translation**
+  (lightly proofread), so some phrasing may read unnaturally — corrections are welcome.
+- **Changing the package title/description in `locale/*.json` needs a DSH restart**: the Host reads
+  that metadata at boot, so a page refresh does not pick it up. UI dictionaries in `client.js` apply
+  on refresh.
+- New copy must be added to all eight dictionaries; the client gate in `npm run check` enforces
+  identical key sets, non-empty values, no CJK in `en`, and the eight locale metas.
 
 ## Windows UTF-8 console (transitional)
 
@@ -193,10 +213,25 @@ node tools/check-host.mjs
 node tools/check-client.mjs
 node tools/check-utf8-bridge.mjs
 node tools/check-native-contracts.mjs
+node tools/check-docs.mjs
 ```
 
-All four gates run offline against a packed installation (`resources/app.asar`); `DSH_APP_DIR`
-accepts the install root, `resources/app`, or `resources/app.asar`.
+All five gates run offline; `host` / `native` need `DSH_APP_DIR` (install root, `resources/app`, or
+`resources/app.asar`), while `client` / `utf8` / `docs` do not need an installation. Coverage and the
+pre-release manual checklist are in [docs/testing.md](docs/testing.md).
+
+## Documentation
+
+| I want to… | Read |
+|---|---|
+| Configure the three keys | [Configuration](docs/guide/configuration.md) |
+| Fix a problem | [Troubleshooting](docs/guide/troubleshooting.md) |
+| Understand detection / gate / bridges | [Design](docs/design.md) |
+| Check the upstream contracts | [Native contracts](docs/reference/native-contracts.md) |
+| Reconcile a DSH upgrade | [Version compatibility](docs/reference/compatibility.md) |
+| Run the gates and the manual checklist | [Acceptance record](docs/testing.md) |
+| Review past pitfalls | [Project experience](docs/experience/README.md) |
+| Maintain and release | [MAINTAINING.md](MAINTAINING.md) |
 
 ## Design constraints
 
@@ -205,7 +240,7 @@ accepts the install root, `resources/app`, or `resources/app.asar`.
 - No VPN auto-detection and no metered-connection preflight: the user confirms the VPN before an
   install, and a page-load failure asks again.
 - No automatic retries; the three-failure breaker ends the loop.
-- Run all four gates before publishing; end-to-end installation is release evidence, not part of
+- Run all five gates before publishing; end-to-end installation is release evidence, not part of
   the automated gate.
 
 ## License

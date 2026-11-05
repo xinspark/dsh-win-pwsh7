@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "PowerShell 7 для Windows",
+    "description": "Обнаруживает и проверяет PowerShell 7 для инструмента pwsh Harness в Windows и при необходимости устанавливает его через Microsoft Store — скриптом или вручную. Инструмент pwsh остаётся заблокированным, пока среда PowerShell 7 действительно не будет разрешена."
+  }
+}

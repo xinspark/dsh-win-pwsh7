@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "PowerShell 7 para Windows",
+    "description": "Detecta e valida o PowerShell 7 para a ferramenta pwsh do Harness no Windows e o instala sob demanda pela Microsoft Store — por script ou manualmente. A ferramenta pwsh permanece bloqueada até que um runtime do PowerShell 7 seja realmente resolvido."
+  }
+}

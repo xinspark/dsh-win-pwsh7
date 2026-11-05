@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "PowerShell 7 für Windows",
+    "description": "Erkennt und prüft PowerShell 7 für das Harness-pwsh-Tool unter Windows und installiert es auf Anfrage über den Microsoft Store — skriptgesteuert oder manuell. Das pwsh-Tool bleibt blockiert, bis tatsächlich eine PowerShell-7-Laufzeit aufgelöst wird."
+  }
+}

@@ -3,14 +3,16 @@
 This file records the installed-DSH facts `dsh-win-pwsh7` relies on. It is evidence for the
 shared-library rule **native first** (`exp-native-first`): read the distribution, cite the symbol,
 and re-check after an upgrade. Line numbers belong to the build below; symbols are the durable part.
+Public documentation starts at [docs/README.md](../README.md); the upgrade checklist is in
+[version compatibility](compatibility.md).
 
 ## Baseline
 
 - DSH build: **0.2.2-rc.1** (every package below reports this version); desktop shell
   **2.0.22-next**, `app.asar` 237,037,363 bytes.
-- Plugin baseline: **0.2.6** (`package.json` `dsh.verifiedAgainst`). 0.2.5 was verified against
-  **0.2.1-rc.3 / rc.4**; the rc.4 → 0.2.2-rc.1 delta is what this file and
-  `tools/check-native-contracts.mjs` cover.
+- Plugin baseline: **0.2.7** (`package.json` `dsh.verifiedAgainst` = **0.2.2-rc.1**). 0.2.6
+  loaded on the same build; 0.2.5 was verified against **0.2.1-rc.3 / rc.4**; the rc.4 →
+  0.2.2-rc.1 delta is what this file and `tools/check-native-contracts.mjs` cover.
 - The plugin itself is installed from a tarball; this file is about the **harness**, not the plugin.
 
 ### Package-level reconciliation, 0.2.1-rc.4 → 0.2.2-rc.1

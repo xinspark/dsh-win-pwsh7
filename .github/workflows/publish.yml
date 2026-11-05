@@ -36,10 +36,12 @@ jobs:
             exit 1
           fi
 
-      # The client gate is the half that runs without a Harness installation: it renders the browser
-      # module against stubs. The Host half needs a real Windows DSH installation, so it runs on the
-      # author's machine before the tag is pushed — that is why `prepublishOnly` is skipped below.
+      # The host / utf8 / native-contracts gates need a real Windows DSH installation and run
+      # on the author's machine before the tag is pushed; the client and documentation gates
+      # are the two that can run here.
       - run: node tools/check-client.mjs
+
+      - run: node tools/check-docs.mjs
 
       - run: npm pack --dry-run
 

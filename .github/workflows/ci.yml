@@ -1,0 +1,28 @@
+name: ci
+
+# Every push / PR runs the gates that do not need a installed DSH:
+# the client half's render smoke test and the documentation link check.
+# Host / utf8 / native-contracts gates need a real Windows DSH installation
+# and run locally before a tag (see MAINTAINING.md).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # No build step and no dependencies; run the gates directly.
+      - name: Client render smoke test
+        run: node tools/check-client.mjs
+
+      - name: Documentation links
+        run: node tools/check-docs.mjs

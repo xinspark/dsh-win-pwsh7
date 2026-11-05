@@ -19,6 +19,8 @@
 - 脚本安装需要 Microsoft Store 可用；手动安装只需要能打开 Store 页面。
 - 不需要管理员权限。
 
+完整文档见 [docs/README.md](docs/README.md)；私有维护材料不随包发布。npm 包页上的相对文档链接可能 404，以 GitHub 仓库为准。
+
 ## 它不做什么
 
 - 不在启动时自动安装。
@@ -38,7 +40,7 @@
 
 ```powershell
 # 从 GitHub 安装（推荐锁定 tag）
-dsh plugin --profile desktop add github:XinSpark/dsh-win-pwsh7#v0.2.6
+dsh plugin --profile desktop add github:XinSpark/dsh-win-pwsh7#v0.2.7
 # 或 npm
 dsh plugin --profile desktop add dsh-win-pwsh7
 ```
@@ -108,7 +110,18 @@ The executor resolves to the version-stable Store family alias: … Nothing to c
 
 ## 插件页
 
-插件页的状态区是原生卡片，显示状态、运行时和执行器路径，右上角有「重新检测」；配置区有 `overridePath` 和默认开启的「与 dsh-ops 共存」原生开关。
+插件页的状态区是原生卡片，显示状态、运行时和执行器路径，右上角有「重新检测」；配置区有 `overridePath` 和默认开启的「与 dsh-ops 共存」原生开关。页面最底部（状态卡下方、页脚「查看仓库」之前）有一行求星提示（`⭐` 字符，文案跟随界面语言；不重复造仓库链接）。
+
+## 多语言
+
+插件自有文案跟随 DSH 的 **8 种官方语言**实时切换：中 / 英 / 日 / 德 / 西 / 法 / 葡 / 俄。
+界面字典在 `client.js`（`DICT_ZH` / `DICT_EN` / `DICT_JA` / `DICT_DE` / `DICT_ES` / `DICT_FR` /
+`DICT_PT` / `DICT_RU`），包标题与描述在 `locale/*.json`，每种语言一份。
+
+- 中 / 英为人工撰写；**日 / 德 / 西 / 法 / 葡 / 俄为机器翻译**（人工粗校），个别措辞可能不自然——欢迎提 Issue/PR 纠正；
+- **只改 `locale/*.json` 的包标题/描述需要重启 DSH**：宿主在启动时读取这份元数据，刷新页面不会变；
+  `client.js` 里的界面字典刷新页面即可生效；
+- 新增文案必须同时补齐 8 本字典；`npm run check` 的 client 门会强校验键集一致、非空、`en` 无 CJK，以及 8 份 locale meta。
 
 ## Windows UTF-8 控制台（过渡层）
 
@@ -159,16 +172,32 @@ node tools/check-host.mjs
 node tools/check-client.mjs
 node tools/check-utf8-bridge.mjs
 node tools/check-native-contracts.mjs
+node tools/check-docs.mjs
 ```
 
-四套门都可以在打包安装（`resources/app.asar`）上离线复跑；`DSH_APP_DIR` 接安装根目录、`resources/app` 或 `resources/app.asar`。
+五套门都可以离线复跑：`host` / `native` 需要 `DSH_APP_DIR` 指向安装根、`resources/app` 或
+`resources/app.asar`；`client` / `utf8` / `docs` 不依赖实例。覆盖范围与发布前实机清单见
+[验收记录](docs/testing.md)。
+
+## 文档
+
+| 我想… | 看 |
+|---|---|
+| 配置三个键 | [配置](docs/guide/configuration.md) |
+| 处理故障 | [故障排查](docs/guide/troubleshooting.md) |
+| 理解判定 / gate / 桥 | [设计说明](docs/design.md) |
+| 核对上游契约 | [原生契约](docs/reference/native-contracts.md) |
+| DSH 升级对账 | [版本兼容](docs/reference/compatibility.md) |
+| 跑门与实机清单 | [验收记录](docs/testing.md) |
+| 踩过的坑 | [项目经验](docs/experience/README.md) |
+| 维护与发版 | [MAINTAINING.md](MAINTAINING.md) |
 
 ## 设计约束
 
 - 判定读执行器自己的 `ctx.shell.pwshPath`，不是扫配置行；`overridePath` 只影响探测与推荐。
 - 不做 VPN 自动检测、不做计量连接预检；VPN 由用户在安装前确认，页面加载失败时再提示。
 - 不自动重试；连续失败由熔断终止。
-- 提交前跑四套门；端到端安装是发布证据，不是自动化门的一部分。
+- 发布前跑五套门；端到端安装是发布证据，不是自动化门的一部分。
 
 ## License
 

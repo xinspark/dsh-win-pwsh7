@@ -1,6 +1,6 @@
 {
   "name": "dsh-win-pwsh7",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "type": "module",
   "description": "Detect and validate PowerShell 7 for the Harness pwsh tool on Windows, and install it on request through the Microsoft Store — scripted or manual — while the pwsh tool stays blocked until a PowerShell 7 runtime actually resolves.",
   "engines": {
@@ -52,8 +52,9 @@
     "windows"
   ],
   "scripts": {
-    "check": "node tools/check-host.mjs && node tools/check-client.mjs && node tools/check-utf8-bridge.mjs && node tools/check-native-contracts.mjs",
+    "check": "node tools/check-host.mjs && node tools/check-client.mjs && node tools/check-utf8-bridge.mjs && node tools/check-native-contracts.mjs && node tools/check-docs.mjs",
     "check:contracts": "node tools/check-native-contracts.mjs",
+    "check:docs": "node tools/check-docs.mjs",
     "prepublishOnly": "npm run check"
   },
   "dsh": {

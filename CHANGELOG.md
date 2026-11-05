@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.2.7 — documentation split, star line and eight official languages
+
+- **Public/private documentation split.** `docs/` is now the public library — navigation, design,
+  configuration, troubleshooting, assembly contract, native contracts, version compatibility,
+  acceptance record and project experience. `docs-private/` is the private library: only its README
+  is tracked, everything else is ignored by `.gitignore`. `docs/native-contracts.md` moved to
+  `docs/reference/native-contracts.md`.
+- **Maintainer-facing files.** Added `MAINTAINING.md` (release / approval / DSH-upgrade rules),
+  `CONTRIBUTING.md`, `SECURITY.md`, `.editorconfig`, `tools/check-docs.mjs`, and
+  `.github/workflows/ci.yml`. The docs gate is part of `npm run check` and of the publish workflow.
+  The native gate gained one check that intentionally turns red when upstream pins the console code
+  page itself — that is the signal to remove the UTF-8 console bridge.
+- **Star line on the plugin detail page.** It is now its own `plugins.detail.section` entry
+  (`dsh-win-pwsh7.star`, order 80) with a localized `⭐ …` line (`star` in every dictionary,
+  `.dw7-star-line`); it self-filters on `subject.pkg.name`, renders null on other pages, and sits
+  before the market source row (order 90) that draws the footer's "view repository" action. It adds
+  no repository link. The client gate asserts the id/order/locale, the self-filtering, the injected
+  translator fallback, and that the line did not stay in the configuration or diagnostics cards. Its
+  registration is isolated: a host that rejects the extra section only loses the line, never the
+  settings card or the status section.
+- **Eight official DSH languages.** The client half now registers `zh` / `en` / `ja` / `de` / `es` /
+  `fr` / `pt` / `ru` dictionaries with an identical key set, and `locale/*.json` carries the package
+  title/description in each language. Chinese and English are hand-written; the other six are
+  machine translation (lightly proofread). `locale/*.json` is read at Host boot, so changing the
+  package title/description needs a DSH restart; the UI dictionaries follow a page refresh. The
+  client gate now enforces key parity, non-empty values, no CJK in non-Chinese dictionaries, and all
+  eight locale metas.
+- **No runtime behavior changed.** Detection, gate, install, dsh-ops coexistence and the UTF-8
+  bridge are untouched; the host gate still reports the same two tools and one prompt section.
+- **Verified locally:** five gates green on DSH 0.2.2-rc.1 (host 2 tools / 1 prompt section,
+  client 3 contributions with eight locale dictionaries, utf8 bridge paths, native 38 checks,
+  22 documents). The plugin is active on the live instance, and its Slots list shows
+  diagnostics(50) → star(80) → market source(90).
+
 ## 0.2.6 — loads on DSH 0.2.2-rc.1 again
 
 - **The plugin had gone silently inert on the 0.2.2 desktop build.** 0.2.5 declared

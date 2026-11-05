@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Windows 版 PowerShell 7",
+    "description": "Windows 上の Harness pwsh ツール向けに PowerShell 7 を検出・検証し、必要に応じて Microsoft Store からインストールします（スクリプトまたは手動）。実際に PowerShell 7 が解決されるまで、pwsh ツールはブロックされます。"
+  }
+}

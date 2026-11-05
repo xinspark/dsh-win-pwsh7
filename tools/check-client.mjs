@@ -79,7 +79,8 @@ function elementsOf(node, type, found = []) {
 
 // --- Stub client context ------------------------------------------------------------------
 
-let dictionaries = { en: {}, zh: {} }
+let dictionaries = {}
+const LOCALES = ['zh', 'en', 'ja', 'de', 'es', 'fr', 'pt', 'ru']
 const registered = []
 // A controller's `getSnapshot` has to return a stable reference until the state changes — React
 // compares with `Object.is` and re-renders forever otherwise. This fixture models that contract
@@ -137,15 +138,21 @@ const client = entry.factory((name) => {
 client.apply(ctx)
 
 const componentFor = (slot) => registered.find((item) => item.registration.name === slot)?.component
+const componentById = (slot, id) => registered.find((item) => item.registration.name === slot && item.registration.id === id)?.component
 const card = componentFor('plugins.row.config')
-const diagnostics = componentFor('plugins.detail.section')
+const diagnostics = componentById('plugins.detail.section', 'dsh-win-pwsh7.diagnostics')
+const starSection = componentById('plugins.detail.section', 'dsh-win-pwsh7.star')
 
-check('the client half registers the two contributions the page uses', () => {
-  assert.deepEqual(registered.map((item) => item.registration.name), [
-    'plugins.row.config',
-    'plugins.detail.section',
+check('the client half registers the three contributions the page uses', () => {
+  assert.deepEqual(registered.map((item) => [item.registration.name, item.registration.id ?? item.registration.key]), [
+    ['plugins.row.config', 'dsh-win-pwsh7#win-pwsh7'],
+    ['plugins.detail.section', 'dsh-win-pwsh7.diagnostics'],
+    ['plugins.detail.section', 'dsh-win-pwsh7.star'],
   ])
-  assert.equal(registered[0].registration.key, 'dsh-win-pwsh7#win-pwsh7')
+  const star = registered.find((item) => item.registration.id === 'dsh-win-pwsh7.star').registration
+  assert.equal(star.order, 80)
+  assert.ok(star.order < 90, 'the star line must render before the market source row (order 90)')
+  assert.equal(star.locale, 'dsh-win-pwsh7')
 })
 
 // --- The configure card -------------------------------------------------------------------
@@ -172,6 +179,10 @@ check('the card renders every hint in Chinese', () => {
   for (const hint of [dictionaries.zh.overridePath_hint, dictionaries.zh.dshOpsCompat_hint]) {
     assert.ok(cardTexts.includes(hint), `the card does not render the hint "${hint.slice(0, 24)}…"`)
   }
+})
+check('the configure card does not carry the star line', () => {
+  assert.ok(!cardTexts.includes(dictionaries.zh.star),
+    'the star line is still in the configuration card; it belongs at the bottom of the page')
 })
 check('the summary view renders nothing, as the row list expects', () => {
   assert.equal(card({ view: 'summary' }), null)
@@ -235,7 +246,32 @@ check('the missing-controller callbacks keep a stable identity across renders', 
 
 // --- The diagnostics section and the action -----------------------------------------------
 
-const diagnosticsTexts = textsOf(diagnostics({ subject: { pkg: 'dsh-win-pwsh7' } }))
+const diagnosticsTree = diagnostics({ subject: { pkg: 'dsh-win-pwsh7' } })
+const diagnosticsTexts = textsOf(diagnosticsTree)
+
+check('the diagnostics section does not carry the star line', () => {
+  assert.ok(!diagnosticsTexts.includes(dictionaries.zh.star),
+    'the star line is still inside the diagnostics section; it belongs to its own detail section')
+})
+
+const starTree = starSection({ subject: { pkg: { name: 'dsh-win-pwsh7' } } })
+const starTexts = textsOf(starTree)
+check('the star section renders the localized line for this package', () => {
+  const star = elementsOf(starTree, 'p').find((node) => node.props.className === 'dw7-star-line')
+  assert.ok(star !== undefined, 'the star section renders no star line')
+  assert.deepEqual(star.children, [dictionaries.zh.star])
+  assert.equal(star.props['data-pwsh7-star'], 'detail')
+  assert.ok(starTexts.includes(dictionaries.zh.star), 'the star line text is missing')
+})
+check('the star section prefers the slot-injected translator', () => {
+  const injected = starSection({ subject: { pkg: { name: 'dsh-win-pwsh7' } }, t: (key) => `T:${key}` })
+  assert.ok(textsOf(injected).includes('T:star'), 'props.t was not used')
+})
+check('the star section stays out of other plugins pages and subjects', () => {
+  assert.equal(starSection({ subject: { pkg: { name: 'some-other-plugin' } } }), null)
+  assert.equal(starSection({ subject: { kind: 'item', id: 'some-item' } }), null)
+  assert.equal(starSection({}), null)
+})
 
 check('the diagnostics section renders its localized title and detecting state', () => {
   assert.ok(diagnosticsTexts.includes(dictionaries.zh.diagnostics_title),
@@ -258,18 +294,56 @@ check('the diagnostics section renders the localized Re-detect label', () => {
 // --- Copy hygiene -------------------------------------------------------------------------
 
 const source = readFileSync(new URL('../client.js', import.meta.url), 'utf8')
-check('the en dictionary carries no Chinese', () => {
-  const en = JSON.stringify(dictionaries.en)
-  assert.ok(typeof en === 'string' && en.length > 200,
-    `the en dictionary looks empty, so this check would pass vacuously: ${en}`)
-  const cjk = en.match(/[\u4e00-\u9fff]/gu)
-  assert.equal(cjk, null, `Chinese in the en dictionary: ${cjk === null ? '' : cjk.join('')}`)
+check('all eight official locale dictionaries are registered with identical keys', () => {
+  for (const locale of LOCALES) {
+    assert.ok(dictionaries[locale] !== undefined && typeof dictionaries[locale] === 'object',
+      `the ${locale} dictionary was never registered`)
+  }
+  const keys = Object.keys(dictionaries.zh).sort()
+  for (const locale of LOCALES) {
+    assert.deepEqual(Object.keys(dictionaries[locale]).sort(), keys,
+      `the ${locale} dictionary key set diverges from zh`)
+    for (const [key, value] of Object.entries(dictionaries[locale])) {
+      assert.equal(typeof value, 'string', `${locale}.${key} is not a string`)
+      assert.ok(value.trim() !== '', `${locale}.${key} is empty`)
+    }
+  }
+})
+check('every translated value keeps the English placeholder set', () => {
+  const placeholders = (text) => [...text.matchAll(/\{(\w+)\}/gu)].map((match) => match[1]).sort()
+  for (const key of Object.keys(dictionaries.en)) {
+    const expected = placeholders(dictionaries.en[key])
+    for (const locale of LOCALES) {
+      assert.deepEqual(placeholders(dictionaries[locale][key]), expected,
+        `${locale}.${key} changed the placeholders of the English source`)
+    }
+  }
+})
+check('the Latin-script dictionaries carry no CJK', () => {
+  for (const locale of ['en', 'de', 'es', 'fr', 'pt', 'ru']) {
+    const text = JSON.stringify(dictionaries[locale])
+    assert.ok(text.length > 200, `the ${locale} dictionary looks empty: ${text}`)
+    const cjk = text.match(/[\u3400-\u9fff]/gu)
+    assert.equal(cjk, null, `CJK in the ${locale} dictionary: ${cjk === null ? '' : cjk.join('')}`)
+  }
+})
+check('every official locale ships its package title and description', () => {
+  for (const locale of LOCALES) {
+    const meta = JSON.parse(readFileSync(new URL(`../locale/${locale}.json`, import.meta.url), 'utf8'))
+    assert.ok(typeof meta?.meta?.title === 'string' && meta.meta.title.trim() !== '',
+      `locale/${locale}.json has no meta.title`)
+    assert.ok(typeof meta?.meta?.description === 'string' && meta.meta.description.trim() !== '',
+      `locale/${locale}.json has no meta.description`)
+  }
+  const enMeta = JSON.stringify(JSON.parse(readFileSync(new URL('../locale/en.json', import.meta.url), 'utf8')))
+  const cjk = enMeta.match(/[\u3400-\u9fff]/gu)
+  assert.equal(cjk, null, `CJK in locale/en.json: ${cjk === null ? '' : cjk.join('')}`)
 })
 check('one card-language stylesheet covers both surfaces', () => {
   assert.ok(/const CSS = `/u.test(source), 'the shared stylesheet is missing')
   assert.ok(!/CSS_CARD|CSS_DIAG/u.test(source), 'the old per-card stylesheets survived')
   for (const selector of ['.dw7-card{', '.dw7-card-body{', '.dw7-group-title{', '.dw7-detail{', '.dw7-status-card{',
-    '.dw7-status-body{', '.dw7-facts{', '.dw7-input{', '.dw7-save{', '.dw7-small{', '.dw7-code{']) {
+    '.dw7-status-body{', '.dw7-facts{', '.dw7-input{', '.dw7-save{', '.dw7-small{', '.dw7-code{', '.dw7-star-section{', '.dw7-star-line{']) {
     assert.ok(source.includes(selector), `the stylesheet does not define ${selector}`)
   }
   // The dsh-ops branch's card chrome: a 0.5px hairline on radius-lg with a shaded body,
@@ -291,11 +365,11 @@ check('no metered-network copy or branch remains', () => {
   assert.ok(!/metered/iu.test(source), 'the removed metered-network feature still has copy or a branch')
 })
 
-check('every t() key the client asks for exists in both dictionaries', () => {
+check('every t() key the client asks for exists in all eight dictionaries', () => {
   const used = [...source.matchAll(/\bt\('([a-z0-9_]+)'/giu)].map((match) => match[1])
   assert.ok(used.length > 10, `only ${used.length} t() keys found — the extraction is probably wrong`)
   for (const key of new Set(used)) {
-    for (const locale of ['en', 'zh']) {
+    for (const locale of LOCALES) {
       assert.ok(typeof dictionaries[locale][key] === 'string', `${key} is missing from the ${locale} dictionary`)
     }
   }
@@ -358,7 +432,8 @@ const remoteCtx = {
 const remoteBefore = registered.length
 client.apply(remoteCtx)
 const remoteParts = registered.slice(remoteBefore)
-const remoteSection = remoteParts.find((item) => item.registration.name === 'plugins.detail.section')?.component
+const remoteSection = remoteParts.find((item) => item.registration.name === 'plugins.detail.section'
+  && item.registration.id === 'dsh-win-pwsh7.diagnostics')?.component
 const remoteButton = elementsOf(remoteSection({ subject: { pkg: 'dsh-win-pwsh7' } }), 'button')[0]
 assert.ok(remoteButton !== undefined, 'the re-detect action rendered no button')
 
