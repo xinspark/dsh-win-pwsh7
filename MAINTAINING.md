@@ -83,12 +83,14 @@ DSH 验证，`client.js` 里的界面字典刷新页面即可。
 
 ## 7. 当前状态（事实）
 
-- 最新发布：npm `0.2.7`（2026-11-05），`dist-tags.latest = 0.2.7`，`gitHead = 05b59ae`，带 SLSA provenance；
-- GitHub：tag `v0.2.7` → `05b59ae`；Release <https://github.com/XinSpark/dsh-win-pwsh7/releases/tag/v0.2.7>；
-  Actions run `42056823785` success（tag 校验、client/docs 门、`npm pack --dry-run`、`npm publish --provenance`）；
-- 工作区版本 `0.2.7`（已发布）：文档分层 + 详情页求星行 + 8 语言适配；五套门全绿（含 native 38 项）；
-  实例已激活，实时 Slots 为 diagnostics(50) → star(80) → market source(90)；
-- 本机 profile 使用 `file:E:/FXS/Data/DSH-Dev/plugins/dsh-win-pwsh7/main/dsh-win-pwsh7-0.2.7.tgz`
+- 最新发布：npm `0.2.8`（2026-11-06），`dist-tags.latest = 0.2.8`，`gitHead = 4d58fff`，26 个文件，
+  带 SLSA provenance；
+- GitHub：tag `v0.2.8` → `4d58fff`；Release <https://github.com/XinSpark/dsh-win-pwsh7/releases/tag/v0.2.8>；
+  Actions run `42207462355` success（tag 校验、client/docs 门、`npm pack --dry-run`、`npm publish --provenance`）；
+- 工作区版本 `0.2.8`（已发布）：删除 dsh-ops 兼容桥，共存交给 dsh-ops 0.5.0 原生联动；五套门全绿
+  （native 38 项、文档 22 篇）；实例已激活，工具面 88 项（`pwsh` + `ops_bash`，无重复官方文件/shell 工具），
+  实时 Slots 为 diagnostics(50) → star(80) → market source(90)；
+- 本机 profile 使用 `file:E:/FXS/Data/DSH-Dev/plugins/dsh-win-pwsh7/main/dsh-win-pwsh7-0.2.8.tgz`
   的真实目录安装（不是 link），插件已激活；
-- 过渡层的上游跟踪 issue：UTF-8 控制台桥（#1）；dsh-ops 兼容桥（#2）已在 0.2.8 删除，触发条件是
-  dsh-ops 0.5.0 的「dsh-win-pwsh7 联动」。
+- 过渡层的上游跟踪 issue：UTF-8 控制台桥（#1）；dsh-ops 兼容桥（#2）已在 0.2.8 删除并关闭，
+  触发条件是 dsh-ops 0.5.0 的「dsh-win-pwsh7 联动」。

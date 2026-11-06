@@ -22,6 +22,10 @@
 - **Verified locally:** five gates green on DSH 0.2.2-rc.1 (host 2 tools / 1 prompt section with
   the removal gate, client 3 contributions with eight dictionaries, UTF-8 bridge paths, native 38
   checks, 22 documents).
+- **Verified live:** the instance runs 0.2.8 on port 53418; its 88-tool surface keeps `pwsh` and
+  `ops_bash` and has no `read` / `glob` / `grep` / `bash` / `pwsh_persistent`; the Slots order is
+  diagnostics(50) → star(80) → market source(90). npm reports `latest = 0.2.8`, 26 files and SLSA
+  provenance at `gitHead = 4d58fff`.
 
 ## 0.2.7 — documentation split, star line and eight official languages
 
