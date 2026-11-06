@@ -55,17 +55,20 @@ Microsoft Store 安装有两种磁盘形态：
 连续 3 次脚本安装失败后熔断：不再启动作业，先让用户确认 VPN / 网络；只有用户明确说
 “问题已解决”后，模型才能带 `userConfirmedFixed: true` 再试一次。计数只在当前 Host 进程内。
 
-## 5. 与 dsh-ops 共存是声明式的
+## 5. 与 dsh-ops 共存交给 dsh-ops 自己
 
-启用状态由 `cordis.patch.yml` 的 `dsh-ops-compat` 覆盖拥有：bundle 在、且排在 dsh-ops
-之后，DSH 重启后就恢复原生 `pwsh` 并保留 `ops_bash`。关闭开关时只写一条带标记的 disable
-override；如果 profile 的 bundle 顺序是 `dsh-win-pwsh7` 在 `dsh-ops` 之前（bundle 覆盖会被
-loader 跳过），则保留一条带标记的 profile 启用块作为兜底。卸载时清理尽力删除自己写过的块，
-绝不碰用户自己的条目。
+0.2.8 起本插件不再拥有共存状态。dsh-ops 0.5.0 增加「dsh-win-pwsh7 联动」：检测到本插件时
+保持官方 `pwsh` 可见，让本插件继续管理它指向的 PowerShell 版本；官方 `read` / `glob` / `grep`
+仍由 dsh-ops 的预设开关隐藏。联动是 dsh-ops 的配置，读写都在它自己的插件页，不依赖 bundle
+顺序，也不要求本插件写 profile 补丁或在 agent 作用域隐藏工具。
 
-桥接层只做“隐藏重复项”：当 OPS 对应工具可见时，按 agent 用 `tools.restrict` 隐藏官方
-`read` / `glob` / `grep` / `bash` / `pwsh_persistent`，保留 `pwsh` 与 `ops_bash`。
-它从**限制前**的 `knownNames` / `restrictableNames` 规划，避免 hide → restore 振荡。
+本插件由此删除了整个 `dsh-ops-bridge`：没有 `dshOpsCompat` 配置、没有 `dsh-ops-compat`
+覆盖、没有 `tools.restrict` 隐藏层。需要 dsh-ops >= 0.5.0；旧版本升级后如果 profile 里残留
+带 `# dsh-win-pwsh7: ... (managed)` 的块，手动删除即可。
+
+历史教训仍保留在[经验 02](experience/02-隐藏恢复振荡.md)：桥接层从限制后的可见集合规划时，
+hide → restore 会互相触发。删除桥并没有否定那条教训——它说明隐藏工具应当由拥有工具面的
+插件负责，而不是由版本探测插件代劳。
 
 ## 6. UTF-8 控制台桥是过渡层
 
@@ -83,9 +86,9 @@ loader 跳过），则保留一条带标记的 profile 启用块作为兜底。�
 | 不变量 | 原因 |
 | --- | --- |
 | 不写执行器的 `pwshPath` | 插件只探测与推荐；接线是用户的 profile patch |
-| 只写自己带标记的 profile 块 | 用户的 `dsh-ops-compat` 条目不能被覆盖或删除 |
+| 不写 profile 补丁 | 共存由 dsh-ops 自己管理；插件只探测与推荐，不替用户改 bundle |
 | 只 pin 普通文件或 Store 家族别名 | 版本号目录会随 Store 更新移动 |
-| gate fail-closed，桥 fail-open | 前者关系到“会不会跑错运行时”，后者只是编码增强 |
+| gate fail-closed，UTF-8 过渡层 fail-open | 前者关系到“会不会跑错运行时”，后者只是编码增强 |
 | 八本字典同一套键（zh / en / ja / de / es / fr / pt / ru） | 缺一本会在切换语言时回退或漏字；client 门会拦 |
 | 插件自己的两个工具不被 gate | 否则被拦后没有恢复路径 |
 | 公开文档只写已发生的事实 | 计划与过程留在 `docs-private/`，避免文档变成愿望清单 |

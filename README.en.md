@@ -32,26 +32,31 @@ repository as the source of truth.
 ## What it does not do
 
 - It does not install anything at startup.
-- It does not write the executor's `pwshPath`; it only writes a marked dsh-ops compatibility override when coexistence is on.
+- It does not write the executor's `pwshPath`; coexistence with dsh-ops is owned by dsh-ops 0.5.0+'s native "dsh-win-pwsh7 link", so this plugin writes no profile patch and hides no tools.
 - It does not uninstall a Store-installed PowerShell 7.
 - It does not auto-detect VPNs or preflight metered connections.
 
 ## Coexistence with dsh-ops
 
-On by default. The `dsh-ops-compat` override in `cordis.patch.yml` owns the enabled state: while
-the dsh-win-pwsh7 bundle is installed and comes after dsh-ops, a DSH restart restores the native
-`pwsh` tool and keeps `ops_bash`. Turning the switch off writes only a marked disable override;
-removing the bundle removes the enable override, and cleanup best-effort removes the disable one.
+Since 0.2.8 coexistence belongs to dsh-ops itself: **dsh-ops 0.5.0+** detects this plugin and turns on
+its "dsh-win-pwsh7 link", keeping the native `pwsh` tool visible while `ops_bash` is still published;
+the official `read` / `glob` / `grep` tools are hidden by dsh-ops's own preset switches. This plugin no
+longer writes `cordis.patch.yml`, writes no compatibility override and masks no tools per agent.
 
-The 0.2.1 bridge planned from the post-restriction visible set, which made it hide and restore the
-same tools in a loop and starved the Host main thread. 0.2.2 plans from the pre-restriction
-`knownNames` / `restrictableNames` and filters names `tools.restrict()` does not accept. The
-multi-session validation passed, so the switch is default-on again.
+dsh-ops 0.5.0 or newer is required. The old `dshOpsCompat` switch and `dsh-ops-compat` override were
+removed in 0.2.8; if an older version left a `# dsh-win-pwsh7: ... (managed)` block in the profile patch,
+delete it after upgrading. The link lives under "Other" on the dsh-ops plugin page; turning it off
+restores dsh-ops's own policy of hiding the host `pwsh`.
+
+History: the 0.2.1 bridge planned from the post-restriction visible set, so it hid and restored the same
+tools in a loop and starved the Host main thread. 0.2.2 planned from the pre-restriction `knownNames` /
+`restrictableNames`. The whole bridge was removed in 0.2.8; the lesson remains in
+[project experience](docs/experience/02-隐藏恢复振荡.md).
 
 ## Install this plugin
 
 ```powershell
-dsh plugin --profile desktop add github:XinSpark/dsh-win-pwsh7#v0.2.7
+dsh plugin --profile desktop add github:XinSpark/dsh-win-pwsh7#v0.2.8
 # or
 dsh plugin --profile desktop add dsh-win-pwsh7
 ```
@@ -89,7 +94,6 @@ The count lives in the current process and resets when DSH restarts.
 | Key | Default | Meaning |
 |---|---|---|
 | `overridePath` | unset | Priority ① explicit `pwsh.exe`. It must spawn and report PowerShell 7+; a failed validation falls back to auto-detection. **It only changes probing and recommendations, not executor wiring.** |
-| `dshOpsCompat` | `true` | Coexist with dsh-ops (on by default): writes and enables its Compatibility mode, hides duplicate official tools, and keeps `pwsh` + `ops_bash`. Requires a restart. |
 | `utf8Console` | `true` | Transitional: prefixes every `pwsh` tool command with `chcp.com 65001` on Windows, so a nested `pwsh -File` cannot emit GBK under code page 936 and be decoded as UTF-8. Removable once the Host ships the same fix. |
 
 `overridePath` is `volatile()`: the plugin-page configuration section saves it live; it can also be
@@ -134,9 +138,10 @@ executor / disable the plugin.
 ## Plugin page
 
 The status section is a native card showing the state, runtime and executor path, with Re-detect
-at the top right; the configuration section exposes `overridePath` and the default-on "Keep native
-pwsh alongside dsh-ops" native switch. The page ends with a one-line star request below the status
-card (`⭐` in the localized copy); it adds no repository link because the footer already has one.
+at the top right; the configuration section exposes only `overridePath` (the coexistence switch went
+away with the dsh-ops bridge and is managed on the dsh-ops page). The page ends with a one-line star
+request below the status card (`⭐` in the localized copy); it adds no repository link because the
+footer already has one.
 
 ## Languages
 
@@ -224,7 +229,7 @@ pre-release manual checklist are in [docs/testing.md](docs/testing.md).
 
 | I want to… | Read |
 |---|---|
-| Configure the three keys | [Configuration](docs/guide/configuration.md) |
+| Configure the two keys | [Configuration](docs/guide/configuration.md) |
 | Fix a problem | [Troubleshooting](docs/guide/troubleshooting.md) |
 | Understand detection / gate / bridges | [Design](docs/design.md) |
 | Check the upstream contracts | [Native contracts](docs/reference/native-contracts.md) |

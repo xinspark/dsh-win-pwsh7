@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.2.8 — the dsh-ops compatibility bridge is gone
+
+- **dsh-ops now owns coexistence.** dsh-ops 0.5.0 added its native "dsh-win-pwsh7 link": when it
+  detects this plugin it keeps the host `pwsh` visible so the plugin can manage its version, while
+  `ops_bash` stays published and the preset switches hide the official file tools dsh-ops replaces.
+  The link lives on the dsh-ops page, is order-independent, and needs no profile edit from this
+  plugin. This closes issue #2.
+- **Removed the bridge end to end.** Deleted `lib/dsh-ops-bridge.js`; dropped
+  `ensureDshOpsCompat` / `mountDshOpsBridge` / `removeDshOpsCompatPatch`, `Config.dshOpsCompat`, the
+  client coexistence switch and its sixteen dictionary entries, and the `dsh-ops-compat` row in
+  `cordis.patch.yml`. The host gate's bridge/profile-patch tests became one static gate asserting
+  the files, config key, patch row and module never come back; the client gate now renders one
+  configuration card instead of two.
+- **No more profile writes or tool masking.** The plugin no longer writes a profile patch, no longer
+  hides official `read` / `glob` / `grep` / `bash` / `pwsh_persistent`, and no longer depends on
+  `pluginManager`, `agents` or `tools.restrict` for coexistence.
+- **Upgrade note.** dsh-ops **0.5.0+** is required for `pwsh` + `ops_bash` coexistence. If an older
+  version left a `# dsh-win-pwsh7: ... (managed)` block in the profile patch, delete that block
+  after upgrading; the new version neither owns nor rewrites it.
+- **Verified locally:** five gates green on DSH 0.2.2-rc.1 (host 2 tools / 1 prompt section with
+  the removal gate, client 3 contributions with eight dictionaries, UTF-8 bridge paths, native 38
+  checks, 22 documents).
+
 ## 0.2.7 — documentation split, star line and eight official languages
 
 - **Public/private documentation split.** `docs/` is now the public library — navigation, design,

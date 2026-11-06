@@ -46,31 +46,22 @@ import { Service } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { resolvePwshPath } from '@deepseek-ai/dsh-pwsh-local'
 import z from '@deepseek-ai/schemastery'
-import {
-  ensureDshOpsCompat,
-  mountDshOpsBridge,
-  removeDshOpsCompatPatch,
-} from './lib/dsh-ops-bridge.js'
 import { mountUtf8ConsoleBridge } from './lib/utf8-console-bridge.js'
 
 export const name = 'dsh-win-pwsh7'
 export const inject = ['subprocess', 'tools', 'configEditor', 'systemPrompt']
 
 /**
- * Row configuration — volatile, so the configure card on the plugin page can edit both
- * values through configForms without a restart. Set them in the profile patch instead if
- * you prefer:
+ * Row configuration — volatile, so the configure card on the plugin page can edit
+ * `overridePath` through configForms without a restart. Set it in the profile patch
+ * instead if you prefer:
  *
  * - id: win-pwsh7
  *   config:
  *     overridePath: 'D:\tools\pwsh\pwsh.exe'   # priority ① — validated, must be an ordinary PowerShell 7+
- *     dshOpsCompat: true                          # default; keeps pwsh beside dsh-ops ops_bash
  */
 export const Config = z.object({
   overridePath: z.string().volatile(),
-  // Default-on after the multi-session validation of the pre-restriction bridge. Turning it
-  // off removes the managed compatibility override; turning it on restores it.
-  dshOpsCompat: z.boolean().default(true).volatile(),
   // Transitional Windows console code page fix, owned by lib/utf8-console-bridge.js.
   // Delete this field together with the bridge and its mount (see README removal contract).
   utf8Console: z.boolean().default(true).volatile(),
@@ -356,27 +347,6 @@ export function apply(ctx, config) {
   const current = () => readRowConfig(ctx, config)
   hostContext = ctx
   const state = runtimeState(ctx)
-  const syncCompat = () => {
-    void ensureDshOpsCompat(ctx, current()).then((result) => {
-      if (result.changed) {
-        const action = result.state === 'bundle'
-          ? 'delegated to the bundle patch'
-          : result.state === 'legacy-order'
-            ? 'kept as a profile fallback because the bundle order is reversed'
-            : result.state === 'disabled' ? 'disabled in the profile' : 'removed'
-        ctx.logger?.info?.('dsh-win-pwsh7: dsh-ops compatibility %s; restart DSH to apply', action)
-      }
-    }, (error) => {
-      ctx.logger?.warn?.('dsh-win-pwsh7: dsh-ops compatibility patch failed: %s', describe(error))
-    })
-  }
-
-  ctx.effect(() => {
-    syncCompat()
-    return () => { removeDshOpsCompatPatch(ctx) }
-  }, 'dsh-win-pwsh7: manage the dsh-ops compatibility patch')
-
-  ctx.effect(() => mountDshOpsBridge(ctx, current), 'dsh-win-pwsh7: hide duplicate official tools while dsh-ops is compatible')
 
   // Transitional, removable: delete this mount and lib/utf8-console-bridge.js once the Host
   // pins the console code page itself. The README records the removal contract.
@@ -511,8 +481,8 @@ export function apply(ctx, config) {
   ctx.effect(() => {
     if (typeof ctx.on !== 'function') return
     const disposers = [
-      ctx.on('app-boot/config-reload', () => { void refreshGate(ctx, current()); syncCompat() }),
-      ctx.on('plugin-manager/changed', () => { void refreshGate(ctx, current()); syncCompat() }),
+      ctx.on('app-boot/config-reload', () => { void refreshGate(ctx, current()) }),
+      ctx.on('plugin-manager/changed', () => { void refreshGate(ctx, current()) }),
     ]
     return () => {
       for (const dispose of disposers) dispose?.()
@@ -540,14 +510,12 @@ let hostContext = null
 function readRowConfig(ctx, fallback) {
   const merged = {
     overridePath: typeof fallback?.overridePath === 'string' ? fallback.overridePath : undefined,
-    dshOpsCompat: fallback?.dshOpsCompat !== false,
     utf8Console: fallback?.utf8Console !== false,
   }
   try {
     const entry = ctx.configEditor.entries().find((candidate) => candidate?.options?.name === 'dsh-win-pwsh7')
     const values = entry?.options?.config
     if (isSet(values?.overridePath)) merged.overridePath = String(values.overridePath)
-    if (values?.dshOpsCompat !== undefined) merged.dshOpsCompat = values.dshOpsCompat !== false
     if (values?.utf8Console !== undefined) merged.utf8Console = values.utf8Console !== false
   } catch { /* fall back to the captured config */ }
   return merged

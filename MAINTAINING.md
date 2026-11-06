@@ -41,7 +41,7 @@ node tools/check-docs.mjs
 ## 4. 发版流程
 
 1. 改代码/文档：`CHANGELOG.md` 新开一节、README 的功能/安装说明同步；
-2. `package.json` 版本号 + 本地 commit + 本地 annotated tag（如 `v0.2.7`）；
+2. `package.json` 版本号 + 本地 commit + 本地 annotated tag（如 `v0.2.8`）；
 3. **请求批准**后推 `main` 与 tag；
 4. tag 触发 `.github/workflows/publish.yml`：校验 tag 与版本一致 → 跑 client / docs 门 →
    `npm pack --dry-run` → `npm publish --provenance --tag latest`（Trusted Publishing，无需 npm token）；
@@ -90,5 +90,5 @@ DSH 验证，`client.js` 里的界面字典刷新页面即可。
   实例已激活，实时 Slots 为 diagnostics(50) → star(80) → market source(90)；
 - 本机 profile 使用 `file:E:/FXS/Data/DSH-Dev/plugins/dsh-win-pwsh7/main/dsh-win-pwsh7-0.2.7.tgz`
   的真实目录安装（不是 link），插件已激活；
-- 两个过渡层的上游跟踪 issue：UTF-8 控制台桥（#1）、dsh-ops 兼容桥（#2），移除条件见
-  [设计说明](docs/design.md) 与 README。
+- 过渡层的上游跟踪 issue：UTF-8 控制台桥（#1）；dsh-ops 兼容桥（#2）已在 0.2.8 删除，触发条件是
+  dsh-ops 0.5.0 的「dsh-win-pwsh7 联动」。

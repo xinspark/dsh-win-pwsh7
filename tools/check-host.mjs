@@ -52,7 +52,6 @@ process.env.LOCALAPPDATA = gateHome
 process.env.PATH = join(gateHome, 'bin')
 
 const { apply } = await import('../index.js')
-const { bridgeDenyNames, toolNameFacts } = await import('../lib/dsh-ops-bridge.js')
 
 /** An ordinary executable that exists on every Windows machine; its version comes from the stub. */
 const ORDINARY = 'C:\\Windows\\System32\\cmd.exe'
@@ -651,148 +650,23 @@ if (existsSync(MSI)) {
   else process.env.ProgramFiles = savedProgramFiles
 }
 
-// --- dsh-ops compatibility patch ---------------------------------------------------------
-const compatDir = mkdtempSync(join(tmpdir(), 'dsh-win-pwsh7-compat-'))
-const compatPatchPath = join(compatDir, 'cordis.patch.yml')
-writeFileSync(compatPatchPath, '# dsh-win-pwsh7: dsh-ops compatibility (managed)\n- id: dsh-ops-compat\n  disabled: false\n- id: keep-me\n  name: keep-me\n', 'utf8')
-const savedProfileDir = process.env.DSH_PROFILE_DIR
-process.env.DSH_PROFILE_DIR = compatDir
-const compatMachine = makeContext({
-  pluginManager: {
-    async listBundles() {
-      return [{ name: 'dsh-ops', installed: true, rows: [{ moduleName: 'dsh-ops/compat' }] }]
-    },
-  },
-})
-apply(compatMachine.ctx, {})
-await new Promise((resolve) => setTimeout(resolve, 50))
-const compatWritten = readFileSync(compatPatchPath, 'utf8')
-check('the enabled path delegates to the bundle and removes a legacy managed override', () => {
-  assert.ok(!compatWritten.includes('dsh-win-pwsh7: dsh-ops compatibility'), 'a managed block survived')
-  assert.ok(!compatWritten.includes('- id: dsh-ops-compat'), 'the bundle-owned override was written into the profile')
-  assert.match(compatWritten, /- id: keep-me/u, 'the user patch entry was lost')
-})
-apply(compatMachine.ctx, { dshOpsCompat: false })
-await new Promise((resolve) => setTimeout(resolve, 50))
-const compatDisabled = readFileSync(compatPatchPath, 'utf8')
-check('turning coexistence off writes only the managed disable override', () => {
-  assert.match(compatDisabled, /dsh-win-pwsh7: dsh-ops compatibility disabled \(managed\)/u)
-  assert.match(compatDisabled, /- id: dsh-ops-compat\n  disabled: true/u)
-  assert.ok(!compatDisabled.includes('dsh-win-pwsh7: dsh-ops compatibility (managed)'), 'the enable marker survived')
-  assert.ok(compatDisabled.includes('- id: keep-me'), 'the user patch entry was removed')
-})
-apply(compatMachine.ctx, { dshOpsCompat: true })
-await new Promise((resolve) => setTimeout(resolve, 50))
-const compatReenabled = readFileSync(compatPatchPath, 'utf8')
-check('turning coexistence back on removes the disable override for the bundle', () => {
-  assert.ok(!compatReenabled.includes('dsh-win-pwsh7: dsh-ops compatibility'), 'a managed block survived')
-  assert.ok(!compatReenabled.includes('- id: dsh-ops-compat'), 'the bundle-owned override was written into the profile')
-  assert.ok(compatReenabled.includes('- id: keep-me'), 'the user patch entry was removed')
-})
-if (savedProfileDir === undefined) delete process.env.DSH_PROFILE_DIR
-else process.env.DSH_PROFILE_DIR = savedProfileDir
-rmSync(compatDir, { recursive: true, force: true })
-
-check('the bundle patch owns the enabled compatibility override', () => {
-  const patch = readFileSync(new URL('../cordis.patch.yml', import.meta.url), 'utf8')
-  assert.match(patch, /^- id: dsh-ops-compat\n  name: dsh-ops\/compat\n  disabled: false$/mu)
-})
-
-const orderDir = mkdtempSync(join(tmpdir(), 'dsh-win-pwsh7-order-'))
-writeFileSync(join(orderDir, 'package.json'), JSON.stringify({
-  dsh: { profile: { bundles: ['dsh-win-pwsh7', 'dsh-ops'] } },
-}), 'utf8')
-writeFileSync(join(orderDir, 'cordis.patch.yml'), '- id: keep-me\n  name: keep-me\n', 'utf8')
-const savedOrderDir = process.env.DSH_PROFILE_DIR
-process.env.DSH_PROFILE_DIR = orderDir
-const orderMachine = makeContext({
-  pluginManager: {
-    async listBundles() {
-      return [{ name: 'dsh-ops', installed: true, rows: [{ moduleName: 'dsh-ops/compat' }] }]
-    },
-  },
-})
-apply(orderMachine.ctx, {})
-await new Promise((resolve) => setTimeout(resolve, 50))
-const orderPatch = readFileSync(join(orderDir, 'cordis.patch.yml'), 'utf8')
-check('a reversed bundle order keeps the profile fallback instead of silently disabling compatibility', () => {
-  assert.match(orderPatch, /dsh-win-pwsh7: dsh-ops compatibility \(managed\)/u)
-  assert.match(orderPatch, /- id: dsh-ops-compat\n  disabled: false/u)
-  assert.ok(orderPatch.includes('- id: keep-me'))
-})
-if (savedOrderDir === undefined) delete process.env.DSH_PROFILE_DIR
-else process.env.DSH_PROFILE_DIR = savedOrderDir
-rmSync(orderDir, { recursive: true, force: true })
-
-// --- agent bridge hides only the duplicate tools ------------------------------------------
-const bridgeDenies = []
-const bridgeAgent = {
-  ctx: {
-    tools: {
-      restrict({ deny }) {
-        bridgeDenies.push(deny)
-        return () => {}
-      },
-    },
-  },
-}
-const bridgeMachine = makeContext({
-  agents: { list: () => [bridgeAgent] },
-  visible: [
-    'read', 'ops_inspect_local_file',
-    'glob', 'ops_glob',
-    'grep', 'ops_grep',
-    'bash', 'pwsh', 'pwsh_persistent', 'ops_bash',
-  ],
-})
-apply(bridgeMachine.ctx, {})
-check('dsh-ops bridge hides duplicate official tools but keeps pwsh', () => {
-  const deny = bridgeDenies.at(-1) ?? []
-  for (const name of ['read', 'glob', 'grep', 'bash', 'pwsh_persistent']) {
-    assert.ok(deny.includes(name), `bridge did not hide ${name}: ${deny.join(', ')}`)
+// --- The dsh-ops compatibility bridge is gone (IS#2) --------------------------------------
+// dsh-ops 0.5.0 owns coexistence: its pwsh7 link keeps the host pwsh visible while ops_bash is
+// published, and its preset switches hide the official file tools it replaces. This plugin must
+// not write profile patches or mask tools again.
+const retiredBridge = [
+  ['index.js', readFileSync(new URL('../index.js', import.meta.url), 'utf8')],
+  ['client.js', readFileSync(new URL('../client.js', import.meta.url), 'utf8')],
+  ['cordis.patch.yml', readFileSync(new URL('../cordis.patch.yml', import.meta.url), 'utf8')],
+  ['package.json', readFileSync(new URL('../package.json', import.meta.url), 'utf8')],
+]
+check('the dsh-ops compatibility bridge stays removed', () => {
+  for (const [file, text] of retiredBridge) {
+    assert.ok(!/dsh-ops-bridge|dshOpsCompat|dsh-ops-compat/u.test(text),
+      `${file} still mentions the retired compatibility bridge`)
   }
-  assert.ok(!deny.includes('pwsh'), 'bridge hid the native pwsh tool')
-  assert.ok(!deny.includes('ops_bash'), 'bridge hid ops_bash')
-})
-
-const bridgeNames = new Set([
-  'read', 'ops_inspect_local_file',
-  'glob', 'ops_glob',
-  'grep', 'ops_grep',
-  'bash', 'pwsh', 'pwsh_persistent', 'ops_bash',
-])
-const bridgeRestrictable = new Set([...bridgeNames].filter((name) => name !== 'ops_bash'))
-const bridgeTools = {
-  view() {
-    return { knownNames: bridgeNames, restrictableNames: bridgeRestrictable }
-  },
-}
-check('the bridge plans from pre-restriction names, so hiding cannot flip it', () => {
-  const first = bridgeDenyNames(toolNameFacts(bridgeTools, {}, []))
-  assert.deepEqual(first, ['read', 'glob', 'grep', 'bash', 'pwsh_persistent'])
-  // `visible` is now post-restriction; knownNames is unchanged, as the host's view guarantees.
-  const second = bridgeDenyNames(toolNameFacts(bridgeTools, {}, first))
-  assert.deepEqual(second, first)
-})
-
-check('the fallback view latches the names already hidden instead of oscillating', () => {
-  const visible = new Set(bridgeNames)
-  const fallbackTools = {
-    view() {
-      return { visible: new Map([...visible].map((name) => [name, {}])) }
-    },
-  }
-  const first = bridgeDenyNames(toolNameFacts(fallbackTools, {}, []))
-  for (const name of first) visible.delete(name)
-  const second = bridgeDenyNames(toolNameFacts(fallbackTools, {}, first))
-  assert.deepEqual(second, first)
-})
-
-check('a scope-local name cannot make the whole restriction plan throw', () => {
-  const facts = toolNameFacts(bridgeTools, {}, [])
-  const deny = bridgeDenyNames({ ...facts, restrictable: new Set([...bridgeRestrictable].filter((name) => name !== 'glob')) })
-  assert.ok(!deny.includes('glob'), 'a non-restrictable name survived the filter')
-  assert.ok(!deny.includes('ops_bash'), 'a scope-local counterpart was put in the deny list')
+  assert.ok(!existsSync(new URL('../lib/dsh-ops-bridge.js', import.meta.url)),
+    'lib/dsh-ops-bridge.js still exists')
 })
 
 // --- The client half's policy copy must not drift (static; no browser needed) -------------

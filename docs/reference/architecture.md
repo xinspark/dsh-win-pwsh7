@@ -7,10 +7,9 @@
 
 ```
 package.json          name / exports / dsh.bundle.patch / dsh.client
-cordis.patch.yml      Host 行 + dsh-ops compat 覆盖
+cordis.patch.yml      Host 行（单个 insert）
 index.js              Host 半：Config、apply、工具、gate、报告、安装作业、Remote 服务
 client.js             Web 半：配置卡 + 状态卡（UMD，无构建）
-lib/dsh-ops-bridge.js 共存：profile 补丁管理 + agent 级工具隐藏
 lib/utf8-console-bridge.js 过渡层：包装 ctx.shell.execute
 lib/typert.host.js    构建期 typert 契约（status 端点）
 locale/*.json         包标题/描述（8 种官方语言各一份）
@@ -34,15 +33,13 @@ tools/check-*.mjs     校验门
 
 | 挂载 | 作用 |
 | --- | --- |
-| `ensureDshOpsCompat`（effect） | 启用时依赖 bundle patch；关闭时写带标记的 disable override；bundle 顺序颠倒时写 profile 启用块兜底；卸载时清理自己写的块 |
-| `mountDshOpsBridge`（effect） | 按 agent 隐藏有 OPS 对应物的官方工具；保留 `pwsh` / `ops_bash` |
 | `mountUtf8ConsoleBridge`（effect） | 包装 `ctx.shell.execute`，前缀 `chcp.com 65001`；可开关、可整体删除 |
 | `activationSweep` | 只检测并写日志，**不安装** |
 | `systemPrompt.section` | 注册 `tool:pwsh-runtime`，顺序取 `TOOL_PWSH`，文本由最近一次判定更新 |
 | 两个工具 | `pwsh7_status` / `pwsh7_install`，输出契约固定为 `{ report }` |
 | `tools.guard` | 同步 gate：`pwsh` 只在判定 allow 时放行 |
 | `tools/pre-execute` | 异步刷新 gate（60s TTL），跑在 guard 之前 |
-| config reload / plugin change | 重新探测执行器，重算共存补丁 |
+| config reload / plugin change | 重新探测执行器，刷新 gate |
 | `Pwsh7Dispatch` | Remote 服务，暴露 `status()` 给插件页 |
 
 ### 使用的服务与事件
@@ -55,12 +52,9 @@ tools/check-*.mjs     校验门
 | `ctx.configEditor.entries()` | 读执行器行与 live 配置；只暴露 `include` 拥有的行 |
 | `ctx.systemPrompt.getSectionOrder('TOOL_PWSH')` | 把提示段放在官方 `tool:pwsh` 旁 |
 | `ctx.tools.register` / `guard` | 注册工具、安装同步 gate |
-| `ctx.tools.view` / `agent.ctx.tools.restrict` | 只读工具名事实；按 agent 隐藏重复项 |
 | `ctx.get('jobs').start` | 后台安装作业；作业句柄提供 `append` / `updateProgress` |
-| `ctx.get('pluginManager')` | 读 bundle 列表与 profile 目录，判定 dsh-ops 是否安装 |
-| `ctx.get('agents')` | 遍历 agent 做工具隐藏；`agent/created` / `agent/disposed` 维护集合 |
 | `ctx.on('tools/pre-execute')` | gate 的异步保鲜；必须调用 `next()`，拒绝归 guard 所有 |
-| `ctx.on('app-boot/config-reload')` / `plugin-manager/changed` | profile 变化后重算 gate 与兼容补丁 |
+| `ctx.on('app-boot/config-reload')` / `plugin-manager/changed` | profile 变化后重算 gate |
 
 ### 工具与输出契约
 
@@ -77,7 +71,7 @@ text block，所以模型看到的就是报告本身。
 
 | 槽位 | 键 / id | 内容 |
 | --- | --- | --- |
-| `plugins.row.config` | `dsh-win-pwsh7#win-pwsh7` | 配置卡：`overridePath` 输入、`dshOpsCompat` 开关、Save/Reset |
+| `plugins.row.config` | `dsh-win-pwsh7#win-pwsh7` | 配置卡：`overridePath` 输入、Save/Reset |
 | `plugins.detail.section` | `dsh-win-pwsh7.diagnostics`，order 50 | 状态卡：状态 / 运行时 / 执行器三条事实、Re-detect、可复制补丁 |
 | `plugins.detail.section` | `dsh-win-pwsh7.star`，order 80 | 页面底部求星行；`subject.pkg.name` 不是本包时返回 null |
 
@@ -95,11 +89,13 @@ text block，所以模型看到的就是报告本身。
 - 文案只走 `t()`；八本字典（zh / en / ja / de / es / fr / pt / ru）键集必须一致，`en` 不得含 CJK；
   包标题/描述在 `locale/*.json`，每种语言一份，宿主启动时读取（改完要重启 DSH）；客户端门会拦键集与 meta。
 
-## 桥的独立删除契约
+## 过渡层的独立删除契约
+
+dsh-ops 共存桥已在 0.2.8（IS#2）整体删除：dsh-ops 0.5.0 的 `pwsh7Link` 原生负责保持 `pwsh`
+可见，本插件不再写 profile、也不再隐藏工具。下面的表只剩 UTF-8 过渡层。
 
 | 模块 | 删除方式 | 验收 |
 | --- | --- | --- |
-| dsh-ops 共存 | 删 `lib/dsh-ops-bridge.js`、`index.js` 的三处 import/调用、`Config.dshOpsCompat`、客户端开关与文案、`cordis.patch.yml` 的 `dsh-ops-compat` 行、host 门里的桥断言 | 仅启用 dsh-ops 时 `pwsh` + `ops_bash` 可见、无重复官方工具 |
 | UTF-8 控制台 | 删 `lib/utf8-console-bridge.js`、import/mount、`Config.utf8Console`、`tools/check-utf8-bridge.mjs` 及 check 链、README 的过渡说明 | `grep -rn "utf8-console-bridge\|utf8Console" index.js lib tools` 无结果 |
 
 删除前先确认上游条件（见 [设计说明](../design.md) 与 [项目经验](../experience/README.md)）。
@@ -107,7 +103,6 @@ text block，所以模型看到的就是报告本身。
 ## 失败行为
 
 - 注册失败：`apply` 捕获并 warn，已注册的工具回滚，不抛到宿主；
-- 兼容补丁失败：warn，不影响 pwsh gate；
 - UTF-8 桥形状不符：fail-open，原 executor 不动；
 - gate 刷新异常：保留上一份判定（fail closed），warn 日志带 `dsh-win-pwsh7:` 前缀；
 - Remote 不可用：客户端卡片显示本地化错误，不编造事实。

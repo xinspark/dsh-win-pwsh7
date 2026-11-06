@@ -24,23 +24,23 @@
 ## 它不做什么
 
 - 不在启动时自动安装。
-- 不写执行器的 `pwshPath`；只会在开启共存时写一条带标记的 dsh-ops 兼容覆盖。
+- 不写执行器的 `pwshPath`；与 dsh-ops 的共存由 dsh-ops 0.5.0+ 的原生「dsh-win-pwsh7 联动」负责，本插件不写 profile 补丁，也不隐藏工具。
 - 不卸载由 Store 安装的 PowerShell 7。
 - 不做 VPN 自动检测，也不做计量连接预检。
 
 ## 与 dsh-ops 共存
 
-默认开启。启用由 `cordis.patch.yml` 的声明式 `dsh-ops-compat` 覆盖负责：只要 dsh-win-pwsh7 的 bundle 安装且位于 dsh-ops 之后，重启 DSH 后官方 `pwsh` 恢复，`ops_bash` 保留。关闭开关时只写入一条带标记的 disable override；卸载 bundle 后启用覆盖消失，cleanup 会尽力删除 disable override。
+从 0.2.8 起，共存交给 dsh-ops 自己：**dsh-ops 0.5.0+** 检测到本插件后会自动打开「dsh-win-pwsh7 联动」，保持官方 `pwsh` 可见，`ops_bash` 继续发布；官方 `read` / `glob` / `grep` 由 dsh-ops 的预设开关隐藏。本插件不再写 `cordis.patch.yml`、不写兼容覆盖，也不在 agent 作用域隐藏工具。
 
-0.2.1 的桥接层在计算隐藏集合时读取了限制后的可见工具，会在隐藏/恢复之间振荡并卡死宿主；0.2.2 改为读取限制前的 `knownNames` / `restrictableNames`，并过滤 `tools.restrict()` 不接受的名字。多会话验证通过后已恢复默认开启。
+需要 dsh-ops 0.5.0 或更高版本。旧版 `dshOpsCompat` 开关和 `dsh-ops-compat` 覆盖已在 0.2.8 移除；如果旧版本在 profile 补丁里留下带 `# dsh-win-pwsh7: ... (managed)` 的块，升级后手动删除。联动开关位于 dsh-ops 插件页的「其他」区；关闭后按 dsh-ops 自己的策略隐藏宿主 `pwsh`。
 
-桥接层还会在对应 OPS 工具可见时隐藏官方 `read` / `glob` / `grep`，以及重复的官方 `bash` / `pwsh_persistent`，让工具面保持 `pwsh` + `ops_bash`。桥接实现独立在 `lib/dsh-ops-bridge.js`，删除该模块和入口挂载即可移除。
+历史：0.2.1 的桥接层在计算隐藏集合时读取了限制后的可见工具，会在隐藏/恢复之间振荡并卡死宿主；0.2.2 改为读取限制前的 `knownNames` / `restrictableNames`。该桥已在 0.2.8 整体删除，经验留在[项目经验](docs/experience/02-隐藏恢复振荡.md)。
 
 ## 安装本插件
 
 ```powershell
 # 从 GitHub 安装（推荐锁定 tag）
-dsh plugin --profile desktop add github:XinSpark/dsh-win-pwsh7#v0.2.7
+dsh plugin --profile desktop add github:XinSpark/dsh-win-pwsh7#v0.2.8
 # 或 npm
 dsh plugin --profile desktop add dsh-win-pwsh7
 ```
@@ -73,7 +73,6 @@ dsh plugin --profile desktop add dsh-win-pwsh7
 | 键 | 默认 | 说明 |
 |---|---|---|
 | `overridePath` | 未设 | 优先级①的显式 `pwsh.exe`。必须能启动并报告 PowerShell 7+；未通过校验就回落到自动探测。**只影响探测与推荐，不接线**。 |
-| `dshOpsCompat` | `true` | 与 dsh-ops 共存（默认开启）：自动写入并启用兼容模式，隐藏重复的官方工具，保留 `pwsh` + `ops_bash`。需要重启。 |
 | `utf8Console` | `true` | 过渡层：Windows 下给 `pwsh` 工具的每条命令前加 `chcp.com 65001`，避免嵌套 `pwsh -File` 按 936 输出 GBK 后被按 UTF-8 解码成乱码。宿主修复后可删除。 |
 
 `overridePath` 是 `volatile()`：插件页配置区保存即生效；也可以写进 profile 补丁：
@@ -110,7 +109,7 @@ The executor resolves to the version-stable Store family alias: … Nothing to c
 
 ## 插件页
 
-插件页的状态区是原生卡片，显示状态、运行时和执行器路径，右上角有「重新检测」；配置区有 `overridePath` 和默认开启的「与 dsh-ops 共存」原生开关。页面最底部（状态卡下方、页脚「查看仓库」之前）有一行求星提示（`⭐` 字符，文案跟随界面语言；不重复造仓库链接）。
+插件页的状态区是原生卡片，显示状态、运行时和执行器路径，右上角有「重新检测」；配置区只有 `overridePath` 输入（共存开关已随 dsh-ops 桥删除，由 dsh-ops 页面管理）。页面最底部（状态卡下方、页脚「查看仓库」之前）有一行求星提示（`⭐` 字符，文案跟随界面语言；不重复造仓库链接）。
 
 ## 多语言
 
@@ -183,9 +182,9 @@ node tools/check-docs.mjs
 
 | 我想… | 看 |
 |---|---|
-| 配置三个键 | [配置](docs/guide/configuration.md) |
+| 配置两个键 | [配置](docs/guide/configuration.md) |
 | 处理故障 | [故障排查](docs/guide/troubleshooting.md) |
-| 理解判定 / gate / 桥 | [设计说明](docs/design.md) |
+| 理解判定 / gate / 共存 | [设计说明](docs/design.md) |
 | 核对上游契约 | [原生契约](docs/reference/native-contracts.md) |
 | DSH 升级对账 | [版本兼容](docs/reference/compatibility.md) |
 | 跑门与实机清单 | [验收记录](docs/testing.md) |

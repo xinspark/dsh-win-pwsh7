@@ -1,4 +1,4 @@
-// client.js — the browser half of dsh-win-pwsh7: the configure cards and the status card
+// client.js — the browser half of dsh-win-pwsh7: the configure card and the status card
 // on the plugin pages. Both use the same chrome as the installed dsh-ops branch — a 0.5px
 // hairline card on radius-lg, a shaded card body, 13px/600 titles and max-content fact
 // labels — while the Host page keeps its own 32px rhythm between detail sections.
@@ -13,7 +13,6 @@ window.__ModuleLoader__.load({
   id: 'dsh-win-pwsh7',
   factory(require) {
     const React = require('react')
-    const { Switch } = require('@deepseek-ai/dsh-client-ui-primitives')
     const h = React.createElement
     const { useEffect, useState, useSyncExternalStore } = React
 
@@ -103,8 +102,6 @@ window.__ModuleLoader__.load({
       executor_hint: 'The runtime the pwsh tool runs. This page only probes and recommends; the profile patch in the status section does the wiring.',
       field_overridePath: 'PowerShell 7 path',
       overridePath_hint: 'Optional explicit pwsh.exe path (`overridePath`). Empty = auto-detect. It must spawn and report PowerShell 7 or newer; the Store family alias is accepted, while a version-numbered Store path is never pinned. This only changes what the plugin probes and recommends — it does not wire the pwsh tool. Use the patch in the status section for that.',
-      field_dshOpsCompat: 'Coexist with dsh-ops',
-      dshOpsCompat_hint: 'On by default. Keeps the native pwsh tool beside ops_bash by enabling dsh-ops Compatibility and hiding its duplicate official tools. Requires a DSH restart.',
       save: 'Save',
       reset: 'Reset',
       saved: 'Saved {at}',
@@ -150,8 +147,6 @@ window.__ModuleLoader__.load({
       executor_hint: 'pwsh 工具实际运行的 PowerShell。本页只做探测与推荐；接线用状态区里的 profile 补丁。',
       field_overridePath: 'PowerShell 7 路径',
       overridePath_hint: '可选的显式 pwsh.exe 路径（`overridePath`）。留空 = 自动探测。必须能启动并报告 PowerShell 7 及以上；Store 家族别名可用，版本号目录永不被 pin。这里只影响插件的探测与推荐，不会给 pwsh 工具接线；接线请用状态区里的补丁。',
-      field_dshOpsCompat: '与 dsh-ops 共存',
-      dshOpsCompat_hint: '默认开启。通过启用 dsh-ops 的 Compatibility 模式并隐藏重复的官方工具，让原生 pwsh 与 ops_bash 并存。需要重启 DSH。',
       save: '保存',
       reset: '重置',
       saved: '已保存 {at}',
@@ -197,8 +192,6 @@ window.__ModuleLoader__.load({
       executor_hint: 'pwsh ツールが実際に実行する PowerShell。このページは検出と推奨のみを行います。接続は状態セクションの profile パッチで行います。',
       field_overridePath: 'PowerShell 7 のパス',
       overridePath_hint: '任意の明示的な pwsh.exe パス（`overridePath`）。空 = 自動検出。起動して PowerShell 7 以上を報告する必要があります。Store ファミリ別名は使用できますが、バージョン番号付きの Store パスは固定されません。これはプラグインの検出と推奨のみを変更し、pwsh ツールの接続は行いません。接続には状態セクションのパッチを使用してください。',
-      field_dshOpsCompat: 'dsh-ops と共存',
-      dshOpsCompat_hint: '既定で有効。dsh-ops の Compatibility モードを有効にし、重複する公式ツールを非表示にして、ネイティブ pwsh と ops_bash を並存させます。DSH の再起動が必要です。',
       save: '保存',
       reset: 'リセット',
       saved: '{at} に保存',
@@ -244,8 +237,6 @@ window.__ModuleLoader__.load({
       executor_hint: 'Die Laufzeit, die das pwsh-Tool ausführt. Diese Seite prüft und empfiehlt nur; die Verdrahtung erfolgt über den profile-Patch im Statusbereich.',
       field_overridePath: 'PowerShell 7-Pfad',
       overridePath_hint: 'Optionaler expliziter pwsh.exe-Pfad (`overridePath`). Leer = automatische Erkennung. Die Datei muss starten und PowerShell 7 oder neuer melden; der Store-Familienalias wird akzeptiert, ein versionsnummerierter Store-Pfad wird nie gepinnt. Dies ändert nur, was das Plugin prüft und empfiehlt — es verdrahtet das pwsh-Tool nicht. Verwenden Sie dafür den Patch im Statusbereich.',
-      field_dshOpsCompat: 'Mit dsh-ops koexistieren',
-      dshOpsCompat_hint: 'Standardmäßig aktiv. Hält das native pwsh-Tool neben ops_bash, indem der dsh-ops-Kompatibilitätsmodus aktiviert und doppelte offizielle Tools ausgeblendet werden. Erfordert einen DSH-Neustart.',
       save: 'Speichern',
       reset: 'Zurücksetzen',
       saved: 'Gespeichert {at}',
@@ -291,8 +282,6 @@ window.__ModuleLoader__.load({
       executor_hint: 'El runtime que ejecuta la herramienta pwsh. Esta página solo sondea y recomienda; el cableado se hace con el parche de profile del área de estado.',
       field_overridePath: 'Ruta de PowerShell 7',
       overridePath_hint: 'Ruta explícita opcional de pwsh.exe (`overridePath`). Vacío = detección automática. Debe iniciarse y notificar PowerShell 7 o superior; se acepta el alias de familia de Store, pero nunca se fija una ruta de Store numerada por versión. Esto solo cambia lo que el plugin sondea y recomienda; no conecta la herramienta pwsh. Para eso, use el parche del área de estado.',
-      field_dshOpsCompat: 'Coexistir con dsh-ops',
-      dshOpsCompat_hint: 'Activado por defecto. Mantiene la herramienta pwsh nativa junto a ops_bash activando el modo de compatibilidad de dsh-ops y ocultando sus herramientas oficiales duplicadas. Requiere reiniciar DSH.',
       save: 'Guardar',
       reset: 'Restablecer',
       saved: 'Guardado {at}',
@@ -338,8 +327,6 @@ window.__ModuleLoader__.load({
       executor_hint: "Le runtime que l'outil pwsh exécute. Cette page ne fait que sonder et recommander ; le câblage se fait via le patch de profile de la zone d'état.",
       field_overridePath: 'Chemin de PowerShell 7',
       overridePath_hint: "Chemin explicite facultatif de pwsh.exe (`overridePath`). Vide = détection automatique. Il doit démarrer et signaler PowerShell 7 ou supérieur ; l'alias de famille Store est accepté, mais un chemin Store numéroté par version n'est jamais épinglé. Cela ne change que ce que le plugin sonde et recommande — cela ne câble pas l'outil pwsh. Utilisez le patch de la zone d'état pour cela.",
-      field_dshOpsCompat: 'Coexister avec dsh-ops',
-      dshOpsCompat_hint: "Activé par défaut. Maintient l'outil pwsh natif à côté d'ops_bash en activant le mode de compatibilité dsh-ops et en masquant ses outils officiels en double. Nécessite un redémarrage de DSH.",
       save: 'Enregistrer',
       reset: 'Réinitialiser',
       saved: 'Enregistré {at}',
@@ -385,8 +372,6 @@ window.__ModuleLoader__.load({
       executor_hint: 'O runtime que a ferramenta pwsh executa. Esta página apenas sonda e recomenda; a conexão é feita pelo patch de profile na área de status.',
       field_overridePath: 'Caminho do PowerShell 7',
       overridePath_hint: 'Caminho explícito opcional do pwsh.exe (`overridePath`). Vazio = detecção automática. Ele deve iniciar e reportar PowerShell 7 ou superior; o alias de família da Store é aceito, mas um caminho da Store numerado por versão nunca é fixado. Isso só altera o que o plugin sonda e recomenda — não conecta a ferramenta pwsh. Para isso, use o patch da área de status.',
-      field_dshOpsCompat: 'Coexistir com dsh-ops',
-      dshOpsCompat_hint: 'Ativado por padrão. Mantém a ferramenta pwsh nativa ao lado do ops_bash ativando o modo de compatibilidade do dsh-ops e ocultando suas ferramentas oficiais duplicadas. Requer reiniciar o DSH.',
       save: 'Salvar',
       reset: 'Redefinir',
       saved: 'Salvo {at}',
@@ -432,8 +417,6 @@ window.__ModuleLoader__.load({
       executor_hint: 'Среда выполнения, которую запускает инструмент pwsh. Эта страница только проверяет и рекомендует; подключение выполняется патчем profile в разделе состояния.',
       field_overridePath: 'Путь к PowerShell 7',
       overridePath_hint: 'Необязательный явный путь к pwsh.exe (`overridePath`). Пусто = автообнаружение. Он должен запускаться и сообщать PowerShell 7 или новее; семейный алиас Store принимается, а путь Store с номером версии никогда не закрепляется. Это меняет только то, что плагин проверяет и рекомендует — инструмент pwsh это не подключает. Для подключения используйте патч в разделе состояния.',
-      field_dshOpsCompat: 'Сосуществование с dsh-ops',
-      dshOpsCompat_hint: 'Включено по умолчанию. Сохраняет нативный инструмент pwsh рядом с ops_bash, включая режим совместимости dsh-ops и скрывая дублирующие официальные инструменты. Требуется перезапуск DSH.',
       save: 'Сохранить',
       reset: 'Сбросить',
       saved: 'Сохранено {at}',
@@ -757,10 +740,9 @@ window.__ModuleLoader__.load({
           const unavailable = snap.status === 'unavailable'
           const served = {
             overridePath: typeof snap.value?.overridePath === 'string' ? snap.value.overridePath : '',
-            dshOpsCompat: snap.value?.dshOpsCompat !== false,
           }
           const values = draft ?? served
-          const dirty = draft !== null && (values.overridePath !== served.overridePath || values.dshOpsCompat !== served.dshOpsCompat)
+          const dirty = draft !== null && values.overridePath !== served.overridePath
           const editable = !loading && !unavailable && snap.writable !== false && !busy
 
           async function save() {
@@ -773,9 +755,6 @@ window.__ModuleLoader__.load({
                 if (served.overridePath !== '') ok = await form.unset('overridePath') && ok
               } else if (nextPath !== served.overridePath) {
                 ok = await form.set('overridePath', nextPath) && ok
-              }
-              if (values.dshOpsCompat !== served.dshOpsCompat) {
-                ok = await form.set('dshOpsCompat', values.dshOpsCompat) && ok
               }
               if (ok) {
                 setDraft(null)
@@ -824,21 +803,6 @@ window.__ModuleLoader__.load({
                         },
                       }),
                       h('p', { className: 'dw7-field-hint' }, t('overridePath_hint'))))),
-                h('section', { className: 'dw7-group dw7-card', key: 'compat' },
-                  h('div', { className: 'dw7-group-head' },
-                    h('div', { className: 'dw7-field-text' },
-                      h('h4', { className: 'dw7-group-title' }, t('field_dshOpsCompat')),
-                      h('p', { className: 'dw7-field-hint' }, t('dshOpsCompat_hint'))),
-                    h(Switch, {
-                      checked: values.dshOpsCompat,
-                      disabled: !editable,
-                      label: t('field_dshOpsCompat'),
-                      onChange: (checked) => {
-                        setDraft({ ...values, dshOpsCompat: checked })
-                        setNote(null)
-                        setSavedAt(null)
-                      },
-                    }))),
                 h('div', { className: 'dw7-actions', key: 'actions' },
                   h('button', {
                     type: 'submit',

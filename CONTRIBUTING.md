@@ -49,7 +49,7 @@ npm pack --dry-run       # 看发布包内容
 | --- | --- |
 | `index.js` | Host 半：Config、apply、工具、gate、报告、安装作业、Remote |
 | `client.js` | Web 半：配置卡、状态卡、求星行（UMD，无构建） |
-| `lib/` | dsh-ops 桥、UTF-8 桥、typert 契约 |
+| `lib/` | UTF-8 过渡桥、typert 契约 |
 | `locale/*.json` | 包标题/描述（8 种官方语言各一份） |
 | `docs/` | 公开文档，入口 [docs/README.md](docs/README.md) |
 | `docs-private/` | 私有文档；只有 README 入库 |

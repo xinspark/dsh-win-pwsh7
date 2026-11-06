@@ -19,7 +19,7 @@
 | 文档 | 内容 |
 | --- | --- |
 | [项目 README](../README.md) | 是什么、装什么、怎么安装 |
-| [配置项](guide/configuration.md) | `overridePath` / `dshOpsCompat` / `utf8Console`、存储位置、生效方式 |
+| [配置项](guide/configuration.md) | `overridePath` / `utf8Console`、存储位置、生效方式 |
 | [故障排查](guide/troubleshooting.md) | 常见症状 → 原因 → 处理 |
 
 ## 我想理解它怎么工作

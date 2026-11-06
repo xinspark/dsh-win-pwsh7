@@ -6,7 +6,7 @@
 
 | 命令 | 覆盖 | 不覆盖 |
 | --- | --- | --- |
-| `node tools/check-host.mjs` | 桩 Host 上下文下注册两个工具、`output.render`、报告/策略、gate 判定与刷新、安装作业与熔断、dsh-ops 补丁与桥、`engines.dsh` 形状 | 真实宿主交互、真实 Store |
+| `node tools/check-host.mjs` | 桩 Host 上下文下注册两个工具、`output.render`、报告/策略、gate 判定与刷新、安装作业与熔断、`engines.dsh` 形状；静态断言 dsh-ops 兼容桥已删除 | 真实宿主交互、真实 Store |
 | `node tools/check-client.mjs` | 桩 React 渲染三份贡献：配置卡、状态卡、独立求星行（id/order 80/locale/按 subject 自过滤）；8 本字典键集/非空、`en` 无 CJK、8 份 `locale/*.json` meta | 外观、真实浏览器 |
 | `node tools/check-utf8-bridge.mjs` | 前缀、关闭开关、幂等、卸载恢复、形状不符 fail-open | 真实 CP936 控制台 |
 | `node tools/check-native-contracts.mjs` | 读本机 `app.asar`，核对 12 个包的 38 项符号/行为（getter、guard、pipeline、jobs、slots、编码 preamble 等） | 客户端槽位实机名 |
@@ -36,9 +36,9 @@ node tools/check-docs.mjs
 | 5 | gate 拒绝 | 执行器解析到 5.1 或 pin 不存在时，调用被拦且不启动进程；文案给出三条路 |
 | 6 | 恢复工具 | 被拦时 `pwsh7_status` / `pwsh7_install` 仍可调用 |
 | 7 | 安装脚本（可选） | VPN 确认门、Store 说明框、点击安装、作业可读/可取消；失败 3 次熔断 |
-| 8 | dsh-ops 共存 | 开关开：`pwsh` + `ops_bash` 并存，无重复官方工具；开关关（正常顺序）：只写 disable 块；重启生效 |
+| 8 | dsh-ops 共存（原生联动） | dsh-ops ≥ 0.5.0 打开「dsh-win-pwsh7 联动」：`pwsh` + `ops_bash` 并存，官方文件工具不重复；关掉联动后按 dsh-ops 自己的策略隐藏 `pwsh`；本插件不写 profile |
 | 9 | UTF-8 | CP936 机器上嵌套 `pwsh -File` 输出中文不再是 `�`；关掉 `utf8Console` 能复现 |
-| 10 | 卸载 | 插件行移除；gate 消失；自己写的 profile 块被清理；PowerShell 7 不被卸载 |
+| 10 | 卸载 | 插件行移除；gate 消失；本插件不写 profile 块，无残留；PowerShell 7 不被卸载 |
 
 ## 验收表
 

@@ -38,18 +38,6 @@ const React = {
   },
 }
 
-/** The native Switch primitive, rendered as the button role the real component uses. */
-function Switch({ checked, onChange, label, disabled }) {
-  return React.createElement('button', {
-    type: 'button',
-    role: 'switch',
-    'aria-checked': checked,
-    'aria-label': label,
-    disabled,
-    onClick: () => onChange(!checked),
-  })
-}
-
 /** Every string rendered anywhere in the tree, in document order. */
 function textsOf(node, found = []) {
   if (typeof node === 'string' || typeof node === 'number') {
@@ -132,7 +120,6 @@ await import('../client.js')
 assert.ok(entry !== undefined, 'client.js did not call window.__ModuleLoader__.load()')
 const client = entry.factory((name) => {
   if (name === 'react') return React
-  if (name === '@deepseek-ai/dsh-client-ui-primitives') return { Switch }
   throw new Error(`the client half required an unexpected module: ${name}`)
 })
 client.apply(ctx)
@@ -161,22 +148,22 @@ const cardTree = card({ view: 'page' })
 const cardTexts = textsOf(cardTree)
 
 check('the card renders its labels from the dictionaries, never as bare config keys', () => {
-  for (const key of ['overridePath', 'dshOpsCompat']) {
+  for (const key of ['overridePath']) {
     assert.ok(!cardTexts.includes(key),
       `the card rendered the bare config key "${key}" — a label was written as a literal instead of t()`)
   }
-  for (const expected of [dictionaries.zh.field_overridePath, dictionaries.zh.field_dshOpsCompat]) {
+  for (const expected of [dictionaries.zh.field_overridePath]) {
     assert.ok(cardTexts.includes(expected), `the card does not render the label "${expected}"`)
   }
 })
-check('the coexist row uses the native Switch primitive, not a custom checkbox', () => {
-  const switches = elementsOf(cardTree, Switch)
-  assert.equal(switches.length, 1, `expected one native switch, found ${switches.length}`)
-  assert.equal(switches[0].props.checked, true)
-  assert.equal(switches[0].props.label, dictionaries.zh.field_dshOpsCompat)
+check('the retired coexistence switch is gone with the dsh-ops bridge', () => {
+  const text = readFileSync(new URL('../client.js', import.meta.url), 'utf8')
+  assert.ok(!text.includes('dshOpsCompat'), 'client.js still reads or writes the retired coexistence config')
+  assert.ok(!text.includes('dsh-ops-compat'), 'client.js still mentions the retired compatibility row')
+  assert.ok(!text.includes('Switch'), 'client.js still imports a switch for the removed card')
 })
 check('the card renders every hint in Chinese', () => {
-  for (const hint of [dictionaries.zh.overridePath_hint, dictionaries.zh.dshOpsCompat_hint]) {
+  for (const hint of [dictionaries.zh.overridePath_hint]) {
     assert.ok(cardTexts.includes(hint), `the card does not render the hint "${hint.slice(0, 24)}…"`)
   }
 })
@@ -188,10 +175,10 @@ check('the summary view renders nothing, as the row list expects', () => {
   assert.equal(card({ view: 'summary' }), null)
 })
 check('the configure surface uses the dsh-ops card language', () => {
-  // Aligned with the installed dsh-ops branch: one hairline card per group, a shaded
-  // card body for editable fields, and the toggle in the card head.
+  // Aligned with the installed dsh-ops branch: one hairline card per group and a shaded
+  // card body for the editable field.
   const sections = elementsOf(cardTree, 'section')
-  assert.equal(sections.length, 2, `expected two cards, found ${sections.length}`)
+  assert.equal(sections.length, 1, `expected one card, found ${sections.length}`)
   for (const section of sections) {
     assert.match(String(section.props.className), /\bdw7-card\b/u)
     assert.match(String(section.props.className), /\bdw7-group\b/u)
