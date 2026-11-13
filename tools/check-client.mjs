@@ -31,6 +31,7 @@ const React = {
     return { type, props: props ?? {}, children: flat }
   },
   useEffect() { /* effects are not run: this gate asserts one render, not behaviour */ },
+  useRef(initial) { return { current: initial } },
   useState(initial) { return [typeof initial === 'function' ? initial() : initial, () => {}] },
   useSyncExternalStore(subscribe, getSnapshot) {
     storeCalls.push({ subscribe, getSnapshot })
@@ -166,6 +167,37 @@ check('the card renders every hint in Chinese', () => {
   for (const hint of [dictionaries.zh.overridePath_hint]) {
     assert.ok(cardTexts.includes(hint), `the card does not render the hint "${hint.slice(0, 24)}…"`)
   }
+})
+check('the path field pairs the input with a native file chooser', () => {
+  const rows = elementsOf(cardTree, 'div').filter((node) => node.props.className === 'dw7-path-row')
+  assert.equal(rows.length, 1, `expected one path row, found ${rows.length}`)
+  const inputs = elementsOf(cardTree, 'input')
+  const text = inputs.find((node) => node.props.type === 'text')
+  const file = inputs.find((node) => node.props.type === 'file')
+  assert.ok(text !== undefined, 'the path text input is missing')
+  assert.ok(file !== undefined, 'the hidden file input is missing')
+  assert.equal(text.props.id, 'dw7-override-path')
+  assert.equal(file.props.className, 'dw7-file')
+  assert.equal(file.props.accept, '.exe,application/x-msdownload')
+  const buttons = elementsOf(cardTree, 'button').filter((node) => node.props.className === 'dw7-pick')
+  assert.equal(buttons.length, 1, `expected one choose button, found ${buttons.length}`)
+  assert.equal(textsOf(buttons[0]).join(''), dictionaries.zh.choose_path)
+  assert.ok(typeof buttons[0].props.onClick === 'function', 'the choose button has no click handler')
+  const calls = []
+  globalThis.__DSH_HOST_PATHS__ = {
+    pathFor(candidate) {
+      calls.push(candidate)
+      return 'C:\\Program Files\\PowerShell\\7\\pwsh.exe'
+    },
+  }
+  try {
+    file.props.onChange({ target: { files: [{ name: 'pwsh.exe' }], value: 'C:\\fakepath\\pwsh.exe' } })
+  } finally {
+    delete globalThis.__DSH_HOST_PATHS__
+  }
+  assert.equal(calls.length, 1, 'the file input did not resolve the picked path through the Desktop bridge')
+  assert.ok(readFileSync(new URL('../client.js', import.meta.url), 'utf8').includes('__DSH_HOST_PATHS__'),
+    'the Desktop host-path bridge is not referenced')
 })
 check('the configure card does not carry the star line', () => {
   assert.ok(!cardTexts.includes(dictionaries.zh.star),

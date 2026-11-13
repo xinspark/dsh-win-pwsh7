@@ -13,7 +13,7 @@ profile 补丁，作为该行的初始值。**只有 `overridePath` 有插件页
 
 插件页的配置区只有一项：
 
-- **PowerShell 7 路径**（`overridePath`）：空 = 自动探测。
+- **PowerShell 7 路径**（`overridePath`）：空 = 自动探测；右侧的「选择...」按钮在 Desktop 上打开系统文件对话框，选中的 `pwsh.exe` 由宿主路径桥回填为绝对路径。普通浏览器没有这个桥时，按钮会提示直接填写路径。
 
 共存不在这里配置：从 0.2.8 起，与 dsh-ops 的共存由 **dsh-ops 0.5.0+** 的「dsh-win-pwsh7
 联动」管理，开关位于 dsh-ops 插件页的「其他」区。保存后不需要重启；状态区右上角的「重新检测」

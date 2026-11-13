@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.9 — a native file picker beside the PowerShell path
+
+- **The `overridePath` field now has a "选择..." button.** It opens a hidden
+  `<input type="file" accept=".exe">`; on Desktop the official preload bridge
+  `__DSH_HOST_PATHS__.pathFor(file)` resolves the selected `pwsh.exe` to an absolute path and fills
+  the draft. Ordinary browsers without that bridge get a localized "type the path instead" note;
+  cancelling changes nothing. No Host dialog, Remote endpoint or profile write was added.
+- **Eight dictionaries gained three keys** (`choose_path`, `picker_unavailable`, `picker_failed`).
+  The client gate asserts the path row, the button label, the hidden input and its `accept`, the
+  bridge call, and the existing key/placeholder/CJK rules.
+- **Verified locally:** five gates green on DSH 0.2.2-rc.1 (host 2 tools / 1 prompt section, client
+  3 contributions / 8 dictionaries, UTF-8 bridge paths, native 38 checks, 22 documents).
+
 ## 0.2.8 — the dsh-ops compatibility bridge is gone
 
 - **dsh-ops now owns coexistence.** dsh-ops 0.5.0 added its native "dsh-win-pwsh7 link": when it

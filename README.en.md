@@ -138,10 +138,12 @@ executor / disable the plugin.
 ## Plugin page
 
 The status section is a native card showing the state, runtime and executor path, with Re-detect
-at the top right; the configuration section exposes only `overridePath` (the coexistence switch went
-away with the dsh-ops bridge and is managed on the dsh-ops page). The page ends with a one-line star
-request below the status card (`⭐` in the localized copy); it adds no repository link because the
-footer already has one.
+at the top right; the configuration section exposes only `overridePath`, with a "Choose..." button
+beside it: Desktop opens the system file dialog and the host path bridge fills in the absolute path
+of the selected `pwsh.exe`; an ordinary browser without that bridge asks you to type the path
+directly (the coexistence switch went away with the dsh-ops bridge and is managed on the dsh-ops
+page). The page ends with a one-line star request below the status card (`⭐` in the localized copy);
+it adds no repository link because the footer already has one.
 
 ## Languages
 

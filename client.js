@@ -14,7 +14,7 @@ window.__ModuleLoader__.load({
   factory(require) {
     const React = require('react')
     const h = React.createElement
-    const { useEffect, useState, useSyncExternalStore } = React
+    const { useEffect, useRef, useState, useSyncExternalStore } = React
 
     const PACKAGE = 'dsh-win-pwsh7'
     const ROW_ID = 'win-pwsh7'
@@ -101,6 +101,9 @@ window.__ModuleLoader__.load({
       executor_title: 'PowerShell 7 executor',
       executor_hint: 'The runtime the pwsh tool runs. This page only probes and recommends; the profile patch in the status section does the wiring.',
       field_overridePath: 'PowerShell 7 path',
+      choose_path: "Choose...",
+      picker_unavailable: "This host has no file picker; type the path instead",
+      picker_failed: "No file selected: {reason}",
       overridePath_hint: 'Optional explicit pwsh.exe path (`overridePath`). Empty = auto-detect. It must spawn and report PowerShell 7 or newer; the Store family alias is accepted, while a version-numbered Store path is never pinned. This only changes what the plugin probes and recommends — it does not wire the pwsh tool. Use the patch in the status section for that.',
       save: 'Save',
       reset: 'Reset',
@@ -146,6 +149,9 @@ window.__ModuleLoader__.load({
       executor_title: 'PowerShell 7 执行器',
       executor_hint: 'pwsh 工具实际运行的 PowerShell。本页只做探测与推荐；接线用状态区里的 profile 补丁。',
       field_overridePath: 'PowerShell 7 路径',
+      choose_path: "选择...",
+      picker_unavailable: "这个宿主没有可用的文件选择器，请直接填写路径",
+      picker_failed: "没选到文件：{reason}",
       overridePath_hint: '可选的显式 pwsh.exe 路径（`overridePath`）。留空 = 自动探测。必须能启动并报告 PowerShell 7 及以上；Store 家族别名可用，版本号目录永不被 pin。这里只影响插件的探测与推荐，不会给 pwsh 工具接线；接线请用状态区里的补丁。',
       save: '保存',
       reset: '重置',
@@ -191,6 +197,9 @@ window.__ModuleLoader__.load({
       executor_title: 'PowerShell 7 実行環境',
       executor_hint: 'pwsh ツールが実際に実行する PowerShell。このページは検出と推奨のみを行います。接続は状態セクションの profile パッチで行います。',
       field_overridePath: 'PowerShell 7 のパス',
+      choose_path: "選択...",
+      picker_unavailable: "このホストにはファイル選択ダイアログがありません。パスを直接入力してください",
+      picker_failed: "ファイルを選択できませんでした：{reason}",
       overridePath_hint: '任意の明示的な pwsh.exe パス（`overridePath`）。空 = 自動検出。起動して PowerShell 7 以上を報告する必要があります。Store ファミリ別名は使用できますが、バージョン番号付きの Store パスは固定されません。これはプラグインの検出と推奨のみを変更し、pwsh ツールの接続は行いません。接続には状態セクションのパッチを使用してください。',
       save: '保存',
       reset: 'リセット',
@@ -236,6 +245,9 @@ window.__ModuleLoader__.load({
       executor_title: 'PowerShell 7-Executor',
       executor_hint: 'Die Laufzeit, die das pwsh-Tool ausführt. Diese Seite prüft und empfiehlt nur; die Verdrahtung erfolgt über den profile-Patch im Statusbereich.',
       field_overridePath: 'PowerShell 7-Pfad',
+      choose_path: "Auswählen...",
+      picker_unavailable: "Dieser Host hat keinen Dateiauswahldialog; geben Sie den Pfad direkt ein",
+      picker_failed: "Keine Datei ausgewählt: {reason}",
       overridePath_hint: 'Optionaler expliziter pwsh.exe-Pfad (`overridePath`). Leer = automatische Erkennung. Die Datei muss starten und PowerShell 7 oder neuer melden; der Store-Familienalias wird akzeptiert, ein versionsnummerierter Store-Pfad wird nie gepinnt. Dies ändert nur, was das Plugin prüft und empfiehlt — es verdrahtet das pwsh-Tool nicht. Verwenden Sie dafür den Patch im Statusbereich.',
       save: 'Speichern',
       reset: 'Zurücksetzen',
@@ -281,6 +293,9 @@ window.__ModuleLoader__.load({
       executor_title: 'Ejecutor de PowerShell 7',
       executor_hint: 'El runtime que ejecuta la herramienta pwsh. Esta página solo sondea y recomienda; el cableado se hace con el parche de profile del área de estado.',
       field_overridePath: 'Ruta de PowerShell 7',
+      choose_path: "Elegir...",
+      picker_unavailable: "Este host no tiene selector de archivos; escriba la ruta directamente",
+      picker_failed: "No se seleccionó ningún archivo: {reason}",
       overridePath_hint: 'Ruta explícita opcional de pwsh.exe (`overridePath`). Vacío = detección automática. Debe iniciarse y notificar PowerShell 7 o superior; se acepta el alias de familia de Store, pero nunca se fija una ruta de Store numerada por versión. Esto solo cambia lo que el plugin sondea y recomienda; no conecta la herramienta pwsh. Para eso, use el parche del área de estado.',
       save: 'Guardar',
       reset: 'Restablecer',
@@ -326,6 +341,9 @@ window.__ModuleLoader__.load({
       executor_title: 'Exécuteur PowerShell 7',
       executor_hint: "Le runtime que l'outil pwsh exécute. Cette page ne fait que sonder et recommander ; le câblage se fait via le patch de profile de la zone d'état.",
       field_overridePath: 'Chemin de PowerShell 7',
+      choose_path: "Choisir...",
+      picker_unavailable: "Cet hôte n'a pas de sélecteur de fichiers ; saisissez le chemin directement",
+      picker_failed: "Aucun fichier sélectionné : {reason}",
       overridePath_hint: "Chemin explicite facultatif de pwsh.exe (`overridePath`). Vide = détection automatique. Il doit démarrer et signaler PowerShell 7 ou supérieur ; l'alias de famille Store est accepté, mais un chemin Store numéroté par version n'est jamais épinglé. Cela ne change que ce que le plugin sonde et recommande — cela ne câble pas l'outil pwsh. Utilisez le patch de la zone d'état pour cela.",
       save: 'Enregistrer',
       reset: 'Réinitialiser',
@@ -371,6 +389,9 @@ window.__ModuleLoader__.load({
       executor_title: 'Executor do PowerShell 7',
       executor_hint: 'O runtime que a ferramenta pwsh executa. Esta página apenas sonda e recomenda; a conexão é feita pelo patch de profile na área de status.',
       field_overridePath: 'Caminho do PowerShell 7',
+      choose_path: "Escolher...",
+      picker_unavailable: "Este host não tem seletor de arquivos; digite o caminho diretamente",
+      picker_failed: "Nenhum arquivo selecionado: {reason}",
       overridePath_hint: 'Caminho explícito opcional do pwsh.exe (`overridePath`). Vazio = detecção automática. Ele deve iniciar e reportar PowerShell 7 ou superior; o alias de família da Store é aceito, mas um caminho da Store numerado por versão nunca é fixado. Isso só altera o que o plugin sonda e recomenda — não conecta a ferramenta pwsh. Para isso, use o patch da área de status.',
       save: 'Salvar',
       reset: 'Redefinir',
@@ -416,6 +437,9 @@ window.__ModuleLoader__.load({
       executor_title: 'Исполнитель PowerShell 7',
       executor_hint: 'Среда выполнения, которую запускает инструмент pwsh. Эта страница только проверяет и рекомендует; подключение выполняется патчем profile в разделе состояния.',
       field_overridePath: 'Путь к PowerShell 7',
+      choose_path: "Выбрать...",
+      picker_unavailable: "В этом хосте нет диалога выбора файлов; введите путь вручную",
+      picker_failed: "Файл не выбран: {reason}",
       overridePath_hint: 'Необязательный явный путь к pwsh.exe (`overridePath`). Пусто = автообнаружение. Он должен запускаться и сообщать PowerShell 7 или новее; семейный алиас Store принимается, а путь Store с номером версии никогда не закрепляется. Это меняет только то, что плагин проверяет и рекомендует — инструмент pwsh это не подключает. Для подключения используйте патч в разделе состояния.',
       save: 'Сохранить',
       reset: 'Сбросить',
@@ -460,6 +484,12 @@ window.__ModuleLoader__.load({
 .dw7-input:focus-visible{outline:none;border-color:var(--dsw-alias-state-business-primary);}
 .dw7-input:disabled{color:var(--dsw-alias-label-tertiary);cursor:default;}
 .dw7-input[aria-invalid=true]{border-color:var(--dsw-alias-state-error-primary);}
+.dw7-path-row{display:flex;align-items:center;gap:8px;}
+.dw7-path-row .dw7-input{flex:1;min-width:0;}
+.dw7-pick{flex:none;height:34px;padding:0 14px;border:.5px solid var(--dsw-alias-border-l4);border-radius:var(--dsw-radius-md);background:var(--dsw-alias-bg-layer-3);color:var(--dsw-alias-label-primary);font:inherit;font-size:13px;line-height:1.5;cursor:pointer;}
+.dw7-pick:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover);}
+.dw7-pick:disabled{opacity:.4;cursor:default;}
+.dw7-file{display:none;}
 .dw7-field-error{margin:0;font-size:12px;line-height:18px;color:var(--dsw-alias-state-error-primary);}
 .dw7-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding-top:4px;}
 .dw7-save{appearance:none;border:1px solid transparent;border-radius:var(--dsw-radius-md);padding:5px 14px;font:inherit;font-size:13px;line-height:1.5;cursor:pointer;background:var(--dsw-alias-label-primary);color:var(--dsw-alias-bg-layer-3);}
@@ -491,7 +521,7 @@ window.__ModuleLoader__.load({
 .dw7-code{box-sizing:border-box;margin:0;padding:10px 12px;border:.5px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-md);background:var(--dsw-alias-bg-layer-3);color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-mono,ui-monospace,SFMono-Regular,Menlo,monospace);font-size:12px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere;}
 .dw7-star-section{display:flex;flex-direction:column;min-width:0;}
 .dw7-star-line{margin:8px 2px 0;padding-top:10px;border-top:.5px solid var(--dsw-alias-border-l2);color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px;}
-.dw7-save:focus-visible,.dw7-reset:focus-visible,.dw7-small:focus-visible,.dw7-input:focus-visible{outline:var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:1px;}
+.dw7-save:focus-visible,.dw7-reset:focus-visible,.dw7-pick:focus-visible,.dw7-small:focus-visible,.dw7-input:focus-visible{outline:var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:1px;}
 @media(max-width:440px){.dw7-facts > div{grid-template-columns:1fr;gap:2px;}}
 `
 
@@ -733,6 +763,7 @@ window.__ModuleLoader__.load({
           const [busy, setBusy] = useState(false)
           const [savedAt, setSavedAt] = useState(null)
           const [note, setNote] = useState(null)
+          const fileInput = useRef(null)
 
           if (props?.view === 'summary') return null
 
@@ -744,6 +775,40 @@ window.__ModuleLoader__.load({
           const values = draft ?? served
           const dirty = draft !== null && values.overridePath !== served.overridePath
           const editable = !loading && !unavailable && snap.writable !== false && !busy
+
+          /** Open the system file dialog through a hidden input; Desktop resolves its real path. */
+          function chooseFile() {
+            if (!editable) return
+            fileInput.current?.click()
+          }
+
+          /**
+           * Desktop exposes `__DSH_HOST_PATHS__.pathFor(file)` (Electron `webUtils`); an ordinary
+           * browser only reveals the basename, so it gets the “type it instead” note rather than a
+           * wrong relative path. Cancel fires nothing and therefore changes nothing.
+           */
+          function pickedFile(event) {
+            const file = event.target.files?.[0]
+            event.target.value = ''
+            if (file === undefined) return
+            const pathFor = globalThis.__DSH_HOST_PATHS__?.pathFor
+            if (typeof pathFor !== 'function') {
+              setNote(t('picker_unavailable'))
+              return
+            }
+            try {
+              const picked = pathFor(file)
+              if (typeof picked === 'string' && picked.trim() !== '') {
+                setDraft({ ...values, overridePath: picked.trim() })
+                setNote(null)
+                setSavedAt(null)
+              } else {
+                setNote(t('picker_unavailable'))
+              }
+            } catch (error) {
+              setNote(t('picker_failed', { reason: describe(error) }))
+            }
+          }
 
           async function save() {
             setBusy(true)
@@ -788,20 +853,36 @@ window.__ModuleLoader__.load({
                   h('div', { className: 'dw7-card-body' },
                     h('div', { className: 'dw7-field' },
                       h('label', { className: 'dw7-field-label', htmlFor: 'dw7-override-path' }, t('field_overridePath')),
-                      h('input', {
-                        id: 'dw7-override-path',
-                        className: 'dw7-input',
-                        type: 'text',
-                        spellCheck: false,
-                        value: values.overridePath,
-                        disabled: !editable,
-                        placeholder: 'C:\\Program Files\\PowerShell\\7\\pwsh.exe',
-                        onChange: (event) => {
-                          setDraft({ ...values, overridePath: event.target.value })
-                          setNote(null)
-                          setSavedAt(null)
-                        },
-                      }),
+                      h('div', { className: 'dw7-path-row' },
+                        h('input', {
+                          id: 'dw7-override-path',
+                          className: 'dw7-input',
+                          type: 'text',
+                          spellCheck: false,
+                          value: values.overridePath,
+                          disabled: !editable,
+                          placeholder: 'C:\\Program Files\\PowerShell\\7\\pwsh.exe',
+                          onChange: (event) => {
+                            setDraft({ ...values, overridePath: event.target.value })
+                            setNote(null)
+                            setSavedAt(null)
+                          },
+                        }),
+                        h('button', {
+                          type: 'button',
+                          className: 'dw7-pick',
+                          onClick: chooseFile,
+                          disabled: !editable,
+                        }, t('choose_path')),
+                        h('input', {
+                          ref: fileInput,
+                          className: 'dw7-file',
+                          type: 'file',
+                          accept: '.exe,application/x-msdownload',
+                          tabIndex: -1,
+                          'aria-hidden': 'true',
+                          onChange: pickedFile,
+                        })),
                       h('p', { className: 'dw7-field-hint' }, t('overridePath_hint'))))),
                 h('div', { className: 'dw7-actions', key: 'actions' },
                   h('button', {
