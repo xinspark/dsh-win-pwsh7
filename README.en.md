@@ -56,7 +56,7 @@ tools in a loop and starved the Host main thread. 0.2.2 planned from the pre-res
 ## Install this plugin
 
 ```powershell
-dsh plugin --profile desktop add github:XinSpark/dsh-win-pwsh7#v0.2.8
+dsh plugin --profile desktop add github:XinSpark/dsh-win-pwsh7#v0.2.9
 # or
 dsh plugin --profile desktop add dsh-win-pwsh7
 ```

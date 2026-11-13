@@ -47,6 +47,7 @@ node tools/check-docs.mjs
 | 0.2.6 | 2.0.22-next / 0.2.2-rc.1 | 四套门全绿（native 37 项） | 发版前本机复跑 | `CHANGELOG.md` 0.2.6 |
 | 0.2.7 | 2.0.22-next / 0.2.2-rc.1 | 五套门全绿（native 38 项；文档 22 篇） | 插件已激活；`pwsh7_status` 可用；实时 Slots: diagnostics(50) → star(80) → market source(90) | [Release v0.2.7](https://github.com/XinSpark/dsh-win-pwsh7/releases/tag/v0.2.7) + `CHANGELOG.md` 0.2.7 |
 | 0.2.8 | 2.0.22-next / 0.2.2-rc.1 | 五套门全绿（native 38 项；文档 22 篇） | 插件 0.2.8 已激活（:53418）；工具面 88 项：`pwsh` + `ops_bash` 可见，`read` / `glob` / `grep` / `bash` / `pwsh_persistent` 均不存在；Slots: diagnostics(50) → star(80) → market source(90) | [Release v0.2.8](https://github.com/XinSpark/dsh-win-pwsh7/releases/tag/v0.2.8) + `CHANGELOG.md` 0.2.8 |
+| 0.2.9 | 2.0.22-next / 0.2.2-rc.1 | 五套门全绿（native 38 项；文档 22 篇；client 门含路径选择按钮/隐藏 input/宿主路径桥断言） | profile 已安装 0.2.9；配置卡 `overridePath` 行含「选择...」按钮，Desktop 经 `__DSH_HOST_PATHS__.pathFor(file)` 回填绝对路径；工具面保持 88 项（`pwsh` + `ops_bash`，无重复官方文件/shell 工具） | [Release v0.2.9](https://github.com/XinSpark/dsh-win-pwsh7/releases/tag/v0.2.9) + `CHANGELOG.md` 0.2.9 |
 
 ## 说明
 

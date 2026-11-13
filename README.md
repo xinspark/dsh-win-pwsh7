@@ -40,7 +40,7 @@
 
 ```powershell
 # 从 GitHub 安装（推荐锁定 tag）
-dsh plugin --profile desktop add github:XinSpark/dsh-win-pwsh7#v0.2.8
+dsh plugin --profile desktop add github:XinSpark/dsh-win-pwsh7#v0.2.9
 # 或 npm
 dsh plugin --profile desktop add dsh-win-pwsh7
 ```
