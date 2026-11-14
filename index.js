@@ -395,8 +395,9 @@ export function apply(ctx, config) {
         output: reportOutput(),
         execute: async (args) => {
           const config = current()
-          const status = await detect(ctx, config)
-          const report = await renderStatus(ctx, config, { status, explicitPath: args?.path })
+          const cache = createProbeCache()
+          const status = await detect(ctx, config, cache)
+          const report = await renderStatus(ctx, config, { status, explicitPath: args?.path, cache })
           return { report }
         }
       })))
@@ -561,8 +562,9 @@ class Pwsh7Dispatch extends Service {
  * @returns the report text.
  */
 async function activationSweep(ctx, config) {
-  const status = await detect(ctx, config)
-  return renderStatus(ctx, config, { status })
+  const cache = createProbeCache()
+  const status = await detect(ctx, config, cache)
+  return renderStatus(ctx, config, { status, cache })
 }
 
 /**
@@ -578,9 +580,10 @@ async function activationSweep(ctx, config) {
  * read is feature-detected and falls back to the concrete config + resolver. When no shell service
  * is composed the caller keeps the legacy row-based reading.
  * @param ctx - the row's Host context.
+ * @param cache - the reading cycle's probe memo.
  * @returns `{ path, version, origin, source }`, or `undefined` when there is no shell service.
  */
-async function shellRuntimeReading(ctx) {
+async function shellRuntimeReading(ctx, cache) {
   const shell = ctx.get?.('shell')
   if (shell === undefined || shell === null) return undefined
 
@@ -606,7 +609,7 @@ async function shellRuntimeReading(ctx) {
   }
 
   if (!isSet(path) || path === 'pwsh') return { path, version: undefined, origin: 'ordinary', source }
-  const version = await probeVersion(ctx, path)
+  const version = await probeVersion(ctx, path, cache)
   return { path, version, origin: originOf(path), source }
 }
 
@@ -620,9 +623,11 @@ async function shellRuntimeReading(ctx) {
  * changes no configuration. The cache is a concrete-executor implementation detail, so the read is
  * feature-detected and a composition without it keeps the patch/reload guidance instead.
  * @param ctx - the row's Host context.
+ * @param cache - the reading cycle's probe memo. The nudge re-probes the *new* path, which is a
+ *   different key, so a stale answer cannot be reused here.
  * @returns the new reading when the nudge produced a usable PowerShell 7, else `undefined`.
  */
-async function refreshExecutorPath(ctx) {
+async function refreshExecutorPath(ctx, cache) {
   const shell = ctx.get?.('shell')
   if (shell === undefined || shell === null) return undefined
   let before
@@ -645,7 +650,7 @@ async function refreshExecutorPath(ctx) {
     return undefined
   }
   if (typeof after !== 'string' || after.length === 0 || after === before) return undefined
-  const version = await probeVersion(ctx, after)
+  const version = await probeVersion(ctx, after, cache)
   if (version === undefined || (majorOf(version) ?? 0) < MINIMUM_MAJOR) return undefined
   return { before, after, version }
 }
@@ -709,12 +714,15 @@ async function refreshGate(ctx, config) {
   if (state.refreshing !== null) return state.refreshing
   state.refreshing = (async () => {
     try {
-      const status = await detect(ctx, config)
-      const rows = await executorRows(ctx)
-      let reading = await shellRuntimeReading(ctx)
+      // One probe memo for this refresh: the three readings below name the same executable often
+      // enough that an unmemoized cycle started it once per reading.
+      const cache = createProbeCache()
+      const status = await detect(ctx, config, cache)
+      const rows = await executorRows(ctx, cache)
+      let reading = await shellRuntimeReading(ctx, cache)
       if (reading?.version !== undefined && (majorOf(reading.version) ?? 0) < MINIMUM_MAJOR) {
-        const refreshed = await refreshExecutorPath(ctx)
-        if (refreshed !== undefined) reading = await shellRuntimeReading(ctx)
+        const refreshed = await refreshExecutorPath(ctx, cache)
+        if (refreshed !== undefined) reading = await shellRuntimeReading(ctx, cache)
       }
       state.gate = gateFromReading(reading, rows, status)
       state.runtimeNote = state.gate.version !== undefined ? hintFor(state.gate.version) : runtimeNoteFor(rows, status)
@@ -774,15 +782,18 @@ function denialText(reading) {
  * @returns the report text.
  */
 async function renderStatus(ctx, config, options = {}) {
-  const status = options.status ?? await detect(ctx, config)
+  // A caller that already probed (the tool's `detect` before `renderStatus`) hands its memo in, so
+  // the report reuses those answers instead of starting the same executables again.
+  const cache = options.cache ?? createProbeCache()
+  const status = options.status ?? await detect(ctx, config, cache)
   const explicit = options.explicitPath === undefined
     ? undefined
-    : await validateCandidate(ctx, options.explicitPath)
-  const rows = await executorRows(ctx)
-  let shellReading = await shellRuntimeReading(ctx)
+    : await validateCandidate(ctx, options.explicitPath, cache)
+  const rows = await executorRows(ctx, cache)
+  let shellReading = await shellRuntimeReading(ctx, cache)
   if (shellReading?.version !== undefined && (majorOf(shellReading.version) ?? 0) < MINIMUM_MAJOR) {
-    const refreshed = await refreshExecutorPath(ctx)
-    if (refreshed !== undefined) shellReading = await shellRuntimeReading(ctx)
+    const refreshed = await refreshExecutorPath(ctx, cache)
+    if (refreshed !== undefined) shellReading = await shellRuntimeReading(ctx, cache)
   }
   const liveStale = shellReading !== undefined
     && shellReading.version !== undefined
@@ -1226,18 +1237,19 @@ function readStream(reader, from) {
  * to ②.
  * @param ctx - the row's Host context.
  * @param config - the resolved row configuration.
+ * @param cache - the reading cycle's probe memo.
  * @returns the detection result with `chosen` set to the best acceptable candidate.
  */
-async function detect(ctx, config) {
+async function detect(ctx, config, cache) {
   const override = isSet(config?.overridePath)
-    ? await validateCandidate(ctx, config.overridePath)
+    ? await validateCandidate(ctx, config.overridePath, cache)
     : undefined
-  const resolved = await validateCandidate(ctx, resolvePwshPath(undefined, process.env, 'win32'))
+  const resolved = await validateCandidate(ctx, resolvePwshPath(undefined, process.env, 'win32'), cache)
   // The upstream resolver reports the version-numbered Store path (MSIX activation puts that
   // directory at the head of PATH). The pinnable form is the family alias beside it, so prefer
   // it whenever it exists: it is the same runtime through a path Store updates do not move.
   const alias = resolved?.origin === 'store-package' ? familyAliasOf(resolved.path) : undefined
-  const auto = alias === undefined ? resolved : await validateCandidate(ctx, alias)
+  const auto = alias === undefined ? resolved : await validateCandidate(ctx, alias, cache)
   return {
     override,
     auto,
@@ -1252,13 +1264,14 @@ async function detect(ctx, config) {
  * this plugin is willing to *pin* is a separate judgement ({@link inPlace}).
  * @param ctx - the row's Host context.
  * @param candidate - the executor row's `pwshPath`.
+ * @param cache - the reading cycle's probe memo.
  * @returns the validation outcome.
  */
-async function validateRowPath(ctx, candidate) {
+async function validateRowPath(ctx, candidate, cache) {
   if (!isSpawnable(candidate)) {
     return { usable: false, path: candidate, origin: originOf(candidate), reason: `${candidate} does not exist` }
   }
-  return await probeAndVersion(ctx, candidate)
+  return await probeAndVersion(ctx, candidate, cache)
 }
 
 /**
@@ -1267,9 +1280,10 @@ async function validateRowPath(ctx, candidate) {
  * version-numbered one is never recommended — see {@link inPlace}.
  * @param ctx - the row's Host context.
  * @param candidate - the path to validate.
+ * @param cache - the reading cycle's probe memo.
  * @returns the validation outcome.
  */
-async function validateCandidate(ctx, candidate) {
+async function validateCandidate(ctx, candidate, cache) {
   if (candidate === undefined) {
     return { usable: false, reason: 'no PowerShell 7 installation was found' }
   }
@@ -1285,7 +1299,7 @@ async function validateCandidate(ctx, candidate) {
     }
   }
 
-  return await probeAndVersion(ctx, candidate)
+  return await probeAndVersion(ctx, candidate, cache)
 }
 
 /**
@@ -1293,10 +1307,11 @@ async function validateCandidate(ctx, candidate) {
  * validators; the origin label follows the path, not the acceptance criteria.
  * @param ctx - the row's Host context.
  * @param candidate - the path to probe.
+ * @param cache - the reading cycle's probe memo.
  * @returns the validation outcome.
  */
-async function probeAndVersion(ctx, candidate) {
-  const version = await probeVersion(ctx, candidate)
+async function probeAndVersion(ctx, candidate, cache) {
+  const version = await probeVersion(ctx, candidate, cache)
   if (version === undefined) {
     return { usable: false, path: candidate, origin: originOf(candidate), reason: `${candidate} did not report a PowerShell version` }
   }
@@ -1311,12 +1326,49 @@ async function probeAndVersion(ctx, candidate) {
 }
 
 /**
- * Ask one executable for its PowerShell version string.
+ * One reading cycle's probe memo. `overridePath`, an executor row and `ctx.shell.pwshPath`
+ * routinely name the same executable, and each reading used to probe it independently — one
+ * `pwsh7_status` call started three identical `pwsh -EncodedCommand` processes for one answer.
+ *
+ * The scope is deliberately **one cycle**, never a TTL: a reading cycle is the window in which
+ * "what will run" cannot have changed underneath the report, so sharing inside it cannot go stale.
+ * Anything longer (a timed cache) would hand a just-installed runtime's predecessor back to the
+ * gate, which is exactly the failure the 60-second gate refresh exists to close.
+ * @returns a fresh memo, keyed by the executable path.
+ */
+function createProbeCache() {
+  return new Map()
+}
+
+/**
+ * Ask one executable for its PowerShell version string, once per reading cycle.
  * @param ctx - the row's Host context.
  * @param executable - the executable to probe.
+ * @param cache - the cycle's probe memo; omitted means "no sharing".
  * @returns the reported version (for example `7.6.6`), or `undefined` when it could not be established.
  */
-async function probeVersion(ctx, executable) {
+async function probeVersion(ctx, executable, cache) {
+  if (cache === undefined) return await probeVersionUncached(ctx, executable)
+  // Windows paths are case-insensitive, and the same file arrives spelled differently from a row
+  // patch (`C:\Tools\pwsh.exe`) and from the executor getter.
+  const key = String(executable).toLowerCase()
+  let pending = cache.get(key)
+  if (pending === undefined) {
+    // The promise is memoized, not the value: two readers that start before the first probe
+    // answers share it instead of racing two processes.
+    pending = probeVersionUncached(ctx, executable)
+    cache.set(key, pending)
+  }
+  return await pending
+}
+
+/**
+ * Probe one executable, unconditionally.
+ * @param ctx - the row's Host context.
+ * @param executable - the executable to probe.
+ * @returns the reported version, or `undefined` when it could not be established.
+ */
+async function probeVersionUncached(ctx, executable) {
   // `-EncodedCommand` sidesteps Windows argument quoting entirely.
   const encoded = Buffer.from('$PSVersionTable.PSVersion.ToString()', 'utf16le').toString('base64')
 
@@ -1361,9 +1413,10 @@ async function probeVersion(ctx, executable) {
  * `pwsh` tool will run; `version` is set only when the path is a PowerShell this plugin would
  * itself use. The report reads `version`; the prompt section reads `probed`.
  * @param ctx - the row's Host context.
+ * @param cache - the reading cycle's probe memo.
  * @returns one entry per executor row, each with a report line and, when usable, its version and origin.
  */
-async function executorRows(ctx) {
+async function executorRows(ctx, cache) {
   const rows = []
   for (const entry of ctx.configEditor.entries()) {
     if (!EXECUTOR_PACKAGES.has(entry?.options?.name)) continue
@@ -1377,7 +1430,7 @@ async function executorRows(ctx) {
       continue
     }
     const pwshPath = String(declared)
-    const check = await validateRowPath(ctx, pwshPath)
+    const check = await validateRowPath(ctx, pwshPath, cache)
     rows.push(check.usable
       ? { id, disabled, pwshPath, config: entry.options?.config ?? {}, version: check.version, probed: check.version, origin: check.origin, text: `${id} : pwshPath = ${pwshPath} (PowerShell ${check.version}, ${labelOf(check)})` }
       : { id, disabled, pwshPath, config: entry.options?.config ?? {}, probed: check.version, text: `${id} : pwshPath = ${pwshPath} (not a usable PowerShell 7: ${check.reason})` })

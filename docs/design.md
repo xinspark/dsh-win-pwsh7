@@ -81,6 +81,9 @@ hide → restore 会互相触发。删除桥并没有否定那条教训——它
 上游修复后按 [README 的删除契约](../README.md) 整块删除；判定条件与证据见
 [经验 04](experience/04-嵌套pwsh乱码.md)。
 
+0.2.11 起这个判断不再靠记性：`node tools/utf8-removal.mjs` 读 `ENCODING_PREAMBLE` 给结论
+（0＝仍需过渡层 / 1＝上游已修、按六步删 / 2＝判不出），`--verify` 是删除后的验收（还有引用就红）。
+
 ## 7. 不能破的不变量
 
 | 不变量 | 原因 |
@@ -98,6 +101,10 @@ hide → restore 会互相触发。删除桥并没有否定那条教训——它
 - `hostContext` 仍是模块级，dispatch 服务用它找最新一次激活的 context；同一进程出现第二行
   或热重载时以最新为准（源码里记为 backlog）。
 - gate 刷新会 spawn 探针（override / resolver / 行 / shell），TTL 60 秒；首次调用比后续慢。
+  0.2.11 起**一次读取周期内同一可执行文件只探一次**（`createProbeCache()` 在周期内记住了探针的
+  promise）：`overridePath`、执行器行与 `ctx.shell.pwshPath` 常常是同一个文件，此前一次
+  `pwsh7_status` 会起三个一模一样的进程。**刻意不做 TTL 缓存** —— 跨周期复用会把「刚装好之前的
+  运行时」喂回 gate，那正是 60 秒刷新要关掉的口子；安装轮询（`awaitRuntime`）也每轮用新周期。
 - CI 不跑 host 三套门：它们需要真实 Windows DSH 安装，发布前在本机跑（见
   [验收记录](testing.md)）。
 - Store 页面已安装时可能显示「打开」，脚本只匹配安装类按钮；这是“检测不到但确实已装”的

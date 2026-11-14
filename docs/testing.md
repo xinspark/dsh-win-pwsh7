@@ -6,15 +6,25 @@
 
 | 命令 | 覆盖 | 不覆盖 |
 | --- | --- | --- |
-| `node tools/check-host.mjs` | 桩 Host 上下文下注册两个工具、`output.render`、报告/策略、gate 判定与刷新、安装作业与熔断、`engines.dsh` 形状；静态断言 dsh-ops 兼容桥已删除 | 真实宿主交互、真实 Store |
+| `node tools/check-host.mjs` | 桩 Host 上下文下注册两个工具、`output.render`、报告/策略、gate 判定与刷新、安装作业与熔断、`engines.dsh` 形状、**每次状态调用 / 每次 gate 刷新对同一可执行文件只探一次**；静态断言 dsh-ops 兼容桥已删除 | 真实宿主交互、真实 Store |
 | `node tools/check-client.mjs` | 桩 React 渲染三份贡献：配置卡、状态卡、独立求星行（id/order 80/locale/按 subject 自过滤）；8 本字典键集/非空、`en` 无 CJK、8 份 `locale/*.json` meta | 外观、真实浏览器 |
 | `node tools/check-utf8-bridge.mjs` | 前缀、关闭开关、幂等、卸载恢复、形状不符 fail-open | 真实 CP936 控制台 |
-| `node tools/check-native-contracts.mjs` | 读本机 `app.asar`，核对 12 个包的 38 项符号/行为（getter、guard、pipeline、jobs、slots、编码 preamble 等） | 客户端槽位实机名 |
+| `node tools/check-native-contracts.mjs` | 读本机 `app.asar`，核对 12 个包的 41 项符号/行为（getter、guard、pipeline、jobs、slots、编码 preamble 等），含客户端槽位的 `kind` 与渲染点 | 客户端槽位实机外观 |
 | `node tools/check-docs.mjs` | 公开文档相对链接与锚点 | 文档内容正确性 |
 
 host / client / utf8 / native 四套门需要 Node 22+；native 与 host 还需要本机装有 DSH，
 用 `DSH_APP_DIR` 指定安装位置。CI 只跑 client 与 docs 两套（见
 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)）。
+
+另有一个**不进门链**的判定工具，专门服务 UTF-8 过渡层的删除：
+
+```powershell
+node tools/utf8-removal.mjs            # 退出码 0=仍需过渡层，1=上游已修（按六步删除），2=判不出
+node tools/utf8-removal.mjs --verify   # 删除后验收：还有引用就红
+```
+
+它不进 `npm run check`：判「上游已修」时**故意红**，把它放进日常门链会让每次发布都变成「要不要现在删桥」的
+人工判断；它按需跑，删除时随桥一起删掉（[README 删除契约](../README.md)第 4 步）。
 
 ```powershell
 $env:DSH_APP_DIR = '<install root>'
@@ -49,6 +59,7 @@ node tools/check-docs.mjs
 | 0.2.8 | 2.0.22-next / 0.2.2-rc.1 | 五套门全绿（native 38 项；文档 22 篇） | 插件 0.2.8 已激活（:53418）；工具面 88 项：`pwsh` + `ops_bash` 可见，`read` / `glob` / `grep` / `bash` / `pwsh_persistent` 均不存在；Slots: diagnostics(50) → star(80) → market source(90) | [Release v0.2.8](https://github.com/XinSpark/dsh-win-pwsh7/releases/tag/v0.2.8) + `CHANGELOG.md` 0.2.8 |
 | 0.2.9 | 2.0.22-next / 0.2.2-rc.1 | 五套门全绿（native 38 项；文档 22 篇；client 门含路径选择按钮/隐藏 input/宿主路径桥断言） | profile 已安装 0.2.9；配置卡 `overridePath` 行含「选择...」按钮，Desktop 经 `__DSH_HOST_PATHS__.pathFor(file)` 回填绝对路径；工具面保持 88 项（`pwsh` + `ops_bash`，无重复官方文件/shell 工具） | [Release v0.2.9](https://github.com/XinSpark/dsh-win-pwsh7/releases/tag/v0.2.9) + `CHANGELOG.md` 0.2.9 |
 | 0.2.10 | 2.0.23-next / 0.2.2-rc.3 | 五套门全绿（native 38 项；文档 22 篇；native 表按 rc.3 重算） | profile 安装 0.2.10；`pwsh7_status` 正常；Slots 活跃；工具面保持 88 项（`pwsh` + `ops_bash`，无重复官方文件/shell 工具） | [Release v0.2.10](https://github.com/XinSpark/dsh-win-pwsh7/releases/tag/v0.2.10) + `CHANGELOG.md` 0.2.10 |
+| 0.2.11 | 2.0.23-next / 0.2.2-rc.3 | 五套门全绿（native 38 → **41** 项；文档 22 篇）；探针门**先红后绿**（每次调用 3 次探针 → 1 次） | 待发版实机复核 | `CHANGELOG.md` 0.2.11 |
 
 ## 说明
 

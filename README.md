@@ -135,18 +135,27 @@ DSH 的 `pwsh` 工具按 UTF-8 解码输出，但命令里再启动的 `pwsh -Fi
 1. 删 `lib/utf8-console-bridge.js`；
 2. 删 `index.js` 的 import 和 `mountUtf8ConsoleBridge(ctx, current)` 调用；
 3. 删 `Config.utf8Console`；
-4. 删 `tools/check-utf8-bridge.mjs`，并从 `package.json` 的 `check` 链里移除；
+4. 删 `tools/check-utf8-bridge.mjs` 与 `tools/utf8-removal.mjs`，并从 `package.json` 的 `check` 链里移除；
 5. 删本节和 CHANGELOG 里的 0.2.5 过渡说明。
 
-验收：`grep -rn "utf8-console-bridge\|utf8Console" index.js lib tools` 无结果。
+验收：`grep -rn "utf8-console-bridge\|utf8Console" index.js lib tools` 无结果 ——
+`node tools/utf8-removal.mjs --verify` 就是这条命令的可执行形式（还有引用就红）。
 
 ### 判定上游已修复
 
-满足任一条件即可开始删除：
+不用靠记性，跑一个工具：
 
-- `@deepseek-ai/dsh-pwsh-local` 的 `ENCODING_PREAMBLE` 自己包含 `chcp.com 65001`（可查上游
+```powershell
+node tools/utf8-removal.mjs     # 0 = 仍需过渡层，1 = 上游已修（打印六步删除），2 = 判不出
+```
+
+它读 `@deepseek-ai/dsh-pwsh-local` 的 `ENCODING_PREAMBLE`，等价于下面两条判据的第一条：
+
+- `ENCODING_PREAMBLE` 自己包含 `chcp.com 65001` / `SetConsoleOutputCP`（可查上游
   `packages/shell/pwsh-local/src/index.ts`，或安装包里的 `lib/index.js`）；
 - 在 CP936 控制台下，不装/关闭本插件时，命令里嵌套的 `pwsh -File` 已经输出 UTF-8。
+
+第二条需要真实 CP936 控制台，工具无法离线判定 —— 它会如实说"判不出"，不猜。
 
 删除前先在真实的 CP936 环境复跑一遍嵌套脚本，确认不再需要这层。
 

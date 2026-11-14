@@ -261,6 +261,36 @@ async function run() {
     assert.match(text, /ctx\.shell\.(resolve|execute)/u)
   })
 
+  // ---- the client slots this plugin's page hangs on ---------------------
+  //
+  // These three registrations are the whole visible surface of the plugin, and a renamed or
+  // re-kinded slot costs it the page **silently** — no error, no warning, just nothing rendered.
+  // The slot map is a per-build fact, so it is read from the installed bundle here instead of
+  // being inspected by hand at release time. `kind` matters as much as the name: a `keyed` slot
+  // registers with `key`, a `list` slot with `id`, and swapping them drops the contribution
+  // without failing the registration.
+  const pluginManagerClient = trySource('dsh-client-ui-plugin-manager', 'lib/client.js')
+  check('the plugin manager still declares the slots this plugin registers into', () => {
+    assert.ok(pluginManagerClient.length > 0, 'dsh-client-ui-plugin-manager/lib/client.js is missing from this build')
+    assert.match(pluginManagerClient, /"plugins\.row\.config":\{kind:`keyed`/u,
+      'plugins.row.config is no longer declared keyed — the configure card registers with `key` and would vanish')
+    assert.match(pluginManagerClient, /"plugins\.detail\.section":\{kind:`list`/u,
+      'plugins.detail.section is no longer declared as a list — the status and star sections register with `id` and would vanish')
+  })
+  check('the plugin manager still renders both slots on a plugin page', () => {
+    // The declaration alone only proves the slot exists; a slot that is never rendered is dead.
+    assert.match(pluginManagerClient, /renderSlot\(`plugins\.row\.config`,\s*\{view:`page`,form\}/u,
+      'plugins.row.config is declared but no longer rendered with {view:"page", form} — the configure card would never appear')
+    assert.match(pluginManagerClient, /renderSlot\(`plugins\.detail\.section`,\s*\{subject\}\)/u,
+      'plugins.detail.section is declared but no longer rendered with {subject} — the status section would never appear')
+  })
+  check('the row-config key is still written as <package>#<row id>', () => {
+    // Our registration key is built from this shape. If upstream changes the separator or the
+    // order, `plugins.row.config` keeps working for every other plugin and stops working for ours.
+    assert.match(pluginManagerClient, /rowConfigKey\(pkg\.name,\s*row\.rowId\)|`\$\{[^}]*name\}#\$\{[^}]*[Rr]owId\}`/u,
+      'the row-config entry key is no longer `<package>#<row id>` — our key would no longer match')
+  })
+
   console.log(`ok — native contracts: ${checks} checks on DSH ${version} (${PACKAGES.length} packages coherent)`)
 }
 

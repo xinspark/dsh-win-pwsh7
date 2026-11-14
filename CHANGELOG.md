@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.2.11 — one probe per executable, and two judgements that used to need a human
+
+- **A reading cycle probes each executable once.** `overridePath`, an executor row and
+  `ctx.shell.pwshPath` routinely name the same file, and each reading probed it independently: one
+  `pwsh7_status` call started **three** identical `pwsh -EncodedCommand` processes, and so did one
+  gate refresh. `createProbeCache()` memoizes *the promise* for the duration of one cycle and the
+  cycle only — no TTL, so nothing can go stale across the 60-second gate refresh (a timed cache is
+  exactly what would hand a just-installed runtime's predecessor back to the gate). The install
+  polling loop (`awaitRuntime`) deliberately keeps a fresh cycle per attempt.
+- **The client slot map is a gate, not a release-time eyeball.** The native gate now reads
+  `dsh-client-ui-plugin-manager/lib/client.js` from the installed build and asserts that
+  `plugins.row.config` is still declared `keyed`, `plugins.detail.section` still `list`, that both
+  are still *rendered* (`{view:"page",form}` / `{subject}`), and that the row-config entry key is
+  still `<package>#<row id>`. A renamed or re-kinded slot costs this plugin its whole page
+  **silently** — no error, nothing rendered — which is why it belongs in a gate.
+- **The UTF-8 bridge removal is now mechanical.** `tools/utf8-removal.mjs` reads
+  `ENCODING_PREAMBLE` and prints a verdict: exit 1 the moment upstream pins the console code page
+  (with the six-step deletion contract), 0 while the bridge is still needed, 2 when it cannot tell.
+  `--verify` is the README acceptance criterion as a command: it fails while any reference to the
+  bridge remains, so the 0.3.0 deletion has an executable finish line. It also reports the second
+  README criterion (a real CP936 console) as not decidable offline instead of guessing.
+- **Two gates grew, none changed meaning.** Host gate: two new checks count probes per status call
+  and per gate refresh. Native gate: **38 → 41** checks. Client, UTF-8 and docs gates unchanged.
+- **Verified locally:** five gates green on DSH 0.2.2-rc.3 (host 2 tools / 1 prompt section,
+  client 3 contributions / 8 dictionaries, UTF-8 bridge paths, native 41 checks, 22 documents).
+  The probe-cost checks were red first (3 probes each) and green after the memo.
+
 ## 0.2.10 — re-verified on DSH 0.2.2-rc.3
 
 - **No runtime code changed.** This is a baseline release after the local DSH-NEXT update to

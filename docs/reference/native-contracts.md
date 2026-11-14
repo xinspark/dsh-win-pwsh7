@@ -10,10 +10,10 @@ Public documentation starts at [docs/README.md](../README.md); the upgrade check
 
 - DSH build: **0.2.2-rc.3** (every package below reports this version); desktop shell
   **2.0.23-next**, `app.asar` 273,810,296 bytes.
-- Plugin baseline: **0.2.10** (`package.json` `dsh.verifiedAgainst` = **0.2.2-rc.3**). 0.2.9
-  shipped against **0.2.2-rc.1**; 0.2.6 loaded on that same build; 0.2.5 was verified against
-  **0.2.1-rc.3 / rc.4**. The rc.1 → rc.3 re-check is what this file and
-  `tools/check-native-contracts.mjs` now cover.
+- Plugin baseline: **0.2.11** (`package.json` `dsh.verifiedAgainst` = **0.2.2-rc.3**). 0.2.10 was a
+  baseline-only release on the same build; 0.2.9 shipped against **0.2.2-rc.1**; 0.2.6 loaded on that
+  same build; 0.2.5 was verified against **0.2.1-rc.3 / rc.4**. The rc.1 → rc.3 re-check is what this
+  file and `tools/check-native-contracts.mjs` now cover; 0.2.11 added the three slot checks.
 - The plugin itself is installed from a tarball; this file is about the **harness**, not the plugin.
 
 ### Package-level reconciliation, 0.2.2-rc.1 → 0.2.2-rc.3
@@ -25,7 +25,8 @@ comparable with the rc.1 table; hashes are:
   same `lib/index.js` hash. The executor, sandbox subclass, `ctx.shell` service, config editor and
   scope contracts are unchanged.
 - `dsh-tools`, `dsh-tool-pwsh`, `dsh-jobs`, `dsh-jobs-local`, `dsh-system-prompt`,
-  `dsh-subprocess` and `dsh-agent` changed, but every one of the 38 asserted symbols still passes;
+  `dsh-subprocess` and `dsh-agent` changed, but every asserted symbol still passes (38 at the rc.3
+  re-check, 41 after 0.2.11 added the slot checks);
   the contract rows below point at the rc.3 lines.
 - `dsh-pwsh-local` still pins only the .NET output encoding — **no `chcp`**, so the console code
   page is still 936 on a zh-CN machine and the transitional UTF-8 bridge stays.
@@ -68,7 +69,7 @@ cites its symbols, not this hash.
 | The install job handle exposes `append` and `updateProgress` | `dsh-jobs-local/lib/index.js:436-442`: `start` builds `handle = { append, updateProgress }`, calls `spec.run(handle)` | The existing install job spec is compatible; `jobs.start` requires a job controller for the owner | install job |
 | `configEditor.entries()` only exposes `include`-owned rows | `dsh-config-editor/lib/index.js:31` filters `entry.parent.tree.ctx.fiber.entry?.id === "include"`; `:69` `edit` writes the profile patch | A Desktop-generated live executor row may not be addressable; scanning rows is not a reliable "what runs" source | report / config guidance |
 | The pwsh prompt section has a stable placement | `dsh-system-prompt/lib/index.js:18` `TOOL_PWSH: 1010`; `:264` `SystemPrompt.getSectionOrder` | `getSectionOrder('TOOL_PWSH')` is the right anchor for `tool:pwsh-runtime` | prompt |
-| Client slots used by the page still exist | live `Slots.listSubTree`: `plugins.row.config` (key `dsh-win-pwsh7#win-pwsh7`), `plugins.detail.section` (`dsh-win-pwsh7.diagnostics`, order 50) | The detail page and configure section remain registered; the Re-detect button renders inside the diagnostics section, and `plugins.detail.actions` is no longer used by this plugin | client |
+| Client slots used by the page still exist | `dsh-client-ui-plugin-manager/lib/client.js`: the `children` map of the `main` slot registration declares `"plugins.row.config":{kind:\`keyed\`,scope:\`root\`}` and `"plugins.detail.section":{kind:\`list\`,scope:\`root\`}`; two `renderSlot(\`plugins.row.config\`,{view:\`page\`,form},{entryKey:key})` / `renderSlot(\`plugins.detail.section\`,{subject})` call sites render them | The detail page, the configure section and the star section keep rendering; a renamed or re-kinded slot drops them **silently**, which is why `check-native-contracts` now asserts the declaration, the kind and the render site | client |
 
 ## Findings that changed the plan
 

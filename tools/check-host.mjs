@@ -85,6 +85,10 @@ function makeContext({ rows = [], versions = {}, jobs = false, shellPath, shellO
   const jobSpecs = []
   const guards = []
   const listeners = new Map()
+  // Every spawned executable, in order. The probe-reuse checks below count these: a refresh cycle
+  // that asks the same path three times is a real cost (one `pwsh` start each), and the count is
+  // the only way to see it from here.
+  const spawns = []
   const state = {
     storeUiExit: 0,
     storeUiStdout: 'STORE_UI_CLICKED: 安装\r\n',
@@ -158,6 +162,7 @@ function makeContext({ rows = [], versions = {}, jobs = false, shellPath, shellO
     configEditor: { entries: () => rows },
     subprocess: {
       spawn({ argv }) {
+        spawns.push(argv[0])
         const encodedIndex = argv.indexOf('-EncodedCommand')
         const encoded = encodedIndex >= 0 ? argv[encodedIndex + 1] ?? '' : ''
         const decoded = encoded === '' ? '' : Buffer.from(encoded, 'base64').toString('utf16le')
@@ -191,7 +196,7 @@ function makeContext({ rows = [], versions = {}, jobs = false, shellPath, shellO
       return `pwsh7-${jobSpecs.length}`
     },
   }
-  return { ctx, registered, sections, orderNames, jobSpecs, state, guards, listeners }
+  return { ctx, registered, sections, orderNames, jobSpecs, state, guards, listeners, spawns }
 }
 
 /** Let every microtask chain the activation sweep started settle, so the shared note is stable. */
@@ -304,6 +309,36 @@ check('the report reads the executor path, not the config rows', () => {
   assert.match(value.report, /via the executor \(C:\\Tools\\pwsh\.exe\)/u)
   assert.match(value.report, /PowerShell 7\.6\.9/u)
   assert.match(value.report, /Nothing to configure/u)
+})
+
+// One executable, asked once. `overridePath`, the executor row and `ctx.shell.pwshPath` routinely
+// name the *same* file; before this check each of the three readings probed it independently, so a
+// single `pwsh7_status` started three identical `pwsh -EncodedCommand` processes. The count is the
+// only way to see that cost from here — the report looks identical either way.
+const reuseMachine = makeContext({
+  rows: [executorRow(ORDINARY)],
+  shellPath: ORDINARY,
+  versions: { [ORDINARY]: '7.6.6', [POWERSHELL_51]: '5.1.26100' },
+})
+apply(reuseMachine.ctx, { overridePath: ORDINARY })
+await flush()
+const countProbes = (spawns, path) => spawns.filter((executable) => executable === path).length
+reuseMachine.spawns.length = 0
+await reuseMachine.registered.get('pwsh7_status').execute({}, undefined)
+const statusProbes = countProbes(reuseMachine.spawns, ORDINARY)
+check('probe cost: one status call asks the same executable once', () => {
+  assert.equal(statusProbes, 1,
+    `one status call spawned ${statusProbes} probes of ${ORDINARY}; every reading shares one probe per executable`)
+})
+
+const reusePreExecute = [...(reuseMachine.listeners.get('tools/pre-execute') ?? [])][0]
+assert.ok(reusePreExecute !== undefined, 'apply registered no tools/pre-execute listener')
+reuseMachine.spawns.length = 0
+await reusePreExecute({ name: 'pwsh' }, async () => ({ kind: 'allow' }))
+const gateProbes = countProbes(reuseMachine.spawns, ORDINARY)
+check('probe cost: one gate refresh asks the same executable once', () => {
+  assert.equal(gateProbes, 1,
+    `one gate refresh spawned ${gateProbes} probes of ${ORDINARY}; the refresh shares one probe per executable`)
 })
 
 // An install that lands while the host is running leaves PwshLocalExecutor's cached 5.1 path in
