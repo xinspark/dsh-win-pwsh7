@@ -13,7 +13,7 @@
 ## 验证环境
 
 - Windows 10/11。
-- 已在 DSH **0.2.2-rc.1** 上验证（见 `package.json` 的 `dsh.verifiedAgainst`）。
+- 已在 DSH **0.2.2-rc.3** 上验证（见 `package.json` 的 `dsh.verifiedAgainst`）。
 - 支持范围 `>=0.2.1-rc.3 <0.3.0-0`：收紧到"下一个预发布"会让 loader 在 DSH 每次小版本更新后**静默跳过**本插件
   （不装、不报错、`pwsh` 失去 gate 和 UTF-8 过渡层），所以上界按**次版本**划。
 - 脚本安装需要 Microsoft Store 可用；手动安装只需要能打开 Store 页面。
@@ -40,7 +40,7 @@
 
 ```powershell
 # 从 GitHub 安装（推荐锁定 tag）
-dsh plugin --profile desktop add github:XinSpark/dsh-win-pwsh7#v0.2.9
+dsh plugin --profile desktop add github:XinSpark/dsh-win-pwsh7#v0.2.10
 # 或 npm
 dsh plugin --profile desktop add dsh-win-pwsh7
 ```

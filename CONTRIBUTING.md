@@ -9,7 +9,7 @@
 | 依赖 | 版本 | 说明 |
 | --- | --- | --- |
 | Node.js | ≥ 22 | 跑 `tools/` 下的校验门，不需要安装依赖 |
-| DSH | 见 [版本兼容](docs/reference/compatibility.md) | 验证基线 0.2.2-rc.1 |
+| DSH | 见 [版本兼容](docs/reference/compatibility.md) | 验证基线 0.2.2-rc.3 |
 | Windows | 10/11 | Host 半在非 Windows 直接返回；gate 与安装只对 Windows 有意义 |
 | PowerShell 7 | 可选 | 本机有 PS7 也能跑门：host 门把探测路径指到临时 fixture |
 

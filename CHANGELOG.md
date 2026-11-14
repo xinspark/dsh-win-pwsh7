@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.2.10 — re-verified on DSH 0.2.2-rc.3
+
+- **No runtime code changed.** This is a baseline release after the local DSH-NEXT update to
+  harness **0.2.2-rc.3** and desktop shell **2.0.23-next**. `dsh.verifiedAgainst` is now
+  `0.2.2-rc.3`; `engines.dsh` stays `>=0.2.1-rc.3 <0.3.0-0`, which already covers the build.
+- **All five gates pass on the new build:** host 2 tools / 1 prompt section, client 3 contributions
+  / 8 dictionaries, UTF-8 bridge paths, native **38 checks**, 22 documents.
+- **Native package table recomputed.** `dsh-pwsh-local`, `dsh-pwsh-sandbox`, `dsh-shell`,
+  `dsh-config-editor` and `dsh-scope` keep their `lib/index.js` hashes; `dsh-tools`,
+  `dsh-tool-pwsh`, `dsh-jobs`, `dsh-jobs-local`, `dsh-system-prompt`, `dsh-subprocess` and
+  `dsh-agent` changed, but every asserted symbol still passes. `dsh-pwsh-local` still pins only
+  the .NET output encoding (no `chcp`), so the UTF-8 console bridge remains necessary.
+- **Live instance:** 0.2.10 is installed in the profile; `pwsh7_status` resolves PowerShell 7.6.9,
+  the plugin page slots remain active, and the tool surface is unchanged (`pwsh` + `ops_bash`).
+
 ## 0.2.9 — a native file picker beside the PowerShell path
 
 - **The `overridePath` field now has a "选择..." button.** It opens a hidden
