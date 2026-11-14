@@ -83,14 +83,17 @@ DSH 验证，`client.js` 里的界面字典刷新页面即可。
 
 ## 7. 当前状态（事实）
 
-- 工作区版本 **0.2.11**（**未发布**）：探针按读取周期去重（一次状态调用从 3 次探针降到 1 次）、
-  native 门 38 → 41 项（客户端槽位 `kind` + 渲染点）、新增 `tools/utf8-removal.mjs` 判定工具；
+- 最新发布：npm `0.2.11`（2026-11-15），`dist-tags.latest = 0.2.11`，`gitHead = 3664bfd`，27 个文件，
+  `shasum = 20f0692adc60d5eedee933598a760005e85eaba5`，带 SLSA provenance（Trusted Publishing）；
+- GitHub：tag `v0.2.11` → `3664bfd`；Release <https://github.com/XinSpark/dsh-win-pwsh7/releases/tag/v0.2.11>；
+  Actions：`ci` run `43647156761` success、`publish` run `43647161190` success（24s）；
+- 0.2.11 内容：探针按读取周期去重（一次状态调用 3 → 1 次探针）、native 门 38 → 41 项
+  （客户端槽位 `kind` + 渲染点 + 行 key 形状）、新增 `tools/utf8-removal.mjs` 判定工具；
   五套门全绿（host 2 tools / 1 prompt section、client 3 contributions / 8 dictionaries、
-  UTF-8 bridge paths、native **41** checks、22 documents）。待 owner 批准后推 tag 发版。
-- 最新发布：npm `0.2.10`（2026-11-14），`dist-tags.latest = 0.2.10`，`gitHead = 86b0d6f`，26 个文件，
-  带 SLSA provenance；
-- GitHub：tag `v0.2.10` → `86b0d6f`；Release <https://github.com/XinSpark/dsh-win-pwsh7/releases/tag/v0.2.10>；
-  Actions run `43581236015` success（tag 校验、client/docs 门、`npm pack --dry-run`、`npm publish --provenance`）；
+  UTF-8 bridge paths、native **41** checks、23 documents）；
+- 本机 profile 已换成 `file:…/main/dsh-win-pwsh7-0.2.11.tgz`（hoisted 布局手工替换，保留
+  `node_modules/dsh-win-pwsh7.bak-0.2.10` 与 `package.json.bak-20261115-0618`）；
+  安装副本与 npm tarball **逐文件一致**；**重启 DSH 后生效**；
 - 0.2.10 基线（回看）：DSH `0.2.2-rc.3`（桌面壳 2.0.23-next），native 当时 38 项；`dsh-pwsh-local`
   hash 未变，UTF-8 控制台桥仍需要；实例已安装 0.2.10，工具面保持 88 项（`pwsh` + `ops_bash`，
   无重复官方文件/shell 工具）；
