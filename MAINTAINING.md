@@ -83,14 +83,14 @@ DSH 验证，`client.js` 里的界面字典刷新页面即可。
 
 ## 7. 当前状态（事实）
 
-- 最新发布：npm `0.2.9`（2026-11-14），`dist-tags.latest = 0.2.9`，`gitHead = 078357d`，26 个文件，
+- 最新发布：npm `0.2.10`（2026-11-14），`dist-tags.latest = 0.2.10`，`gitHead = 86b0d6f`，26 个文件，
   带 SLSA provenance；
-- GitHub：tag `v0.2.9` → `078357d`；Release <https://github.com/XinSpark/dsh-win-pwsh7/releases/tag/v0.2.9>；
-  Actions run `43468029849` success（tag 校验、client/docs 门、`npm pack --dry-run`、`npm publish --provenance`）；
-- 工作区版本 `0.2.9`（已发布）：配置卡 `overridePath` 右侧新增「选择...」按钮，Desktop 经
-  `__DSH_HOST_PATHS__.pathFor(file)` 回填绝对路径；五套门全绿（native 38 项、文档 22 篇）；
-  实例已安装 0.2.9，工具面保持 88 项（`pwsh` + `ops_bash`，无重复官方文件/shell 工具）；
-- 本机 profile 使用 `file:E:/FXS/Data/DSH-Dev/plugins/dsh-win-pwsh7/main/dsh-win-pwsh7-0.2.9.tgz`
+- GitHub：tag `v0.2.10` → `86b0d6f`；Release <https://github.com/XinSpark/dsh-win-pwsh7/releases/tag/v0.2.10>；
+  Actions run `43581236015` success（tag 校验、client/docs 门、`npm pack --dry-run`、`npm publish --provenance`）；
+- 工作区版本 `0.2.10`（已发布）：无运行代码变更；基线从 DSH `0.2.2-rc.1` 抬到 **`0.2.2-rc.3`**
+  （桌面壳 2.0.23-next），native 38 项与五套门全绿；`dsh-pwsh-local` hash 未变，UTF-8 控制台桥仍需要；
+  实例已安装 0.2.10，工具面保持 88 项（`pwsh` + `ops_bash`，无重复官方文件/shell 工具）；
+- 本机 profile 使用 `file:E:/FXS/Data/DSH-Dev/plugins/dsh-win-pwsh7/main/dsh-win-pwsh7-0.2.10.tgz`
   的真实目录安装（不是 link），安装目录与 npm tarball 逐文件一致；
 - 过渡层的上游跟踪 issue：UTF-8 控制台桥（#1）；dsh-ops 兼容桥（#2）已在 0.2.8 删除并关闭，
   触发条件是 dsh-ops 0.5.0 的「dsh-win-pwsh7 联动」。
