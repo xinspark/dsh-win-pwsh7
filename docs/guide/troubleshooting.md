@@ -12,7 +12,7 @@
 | 装好 Store 版，`pwsh` 还是被拦 | 执行器缓存了旧的 5.1 路径 | 调一次 `pwsh7_status`（会触发受控刷新）；仍不行则按补丁 pin + 重启 |
 | Store 页面打开但没有「安装」按钮 | VPN / Store 状态问题；或页面已装显示「打开」 | 关 VPN、完全退出并重启 Microsoft Store 再试；或用手动 Win+R 路径；已装则直接 `pwsh7_status` |
 | 连续 3 次脚本安装失败，工具不再启动作业 | 熔断器 | 先确认 VPN / 网络，用户明确说修好后再带 `userConfirmedFixed: true` 重试一次 |
-| 命令里嵌套 `pwsh` / `powershell`，中文变 `�` | 控制台代码页 936，宿主按 UTF-8 解码 | 确认 `utf8Console` 没被关掉（默认开）；或命令前手动加 `chcp.com 65001 > $null;` |
+| 命令里嵌套 `pwsh` / `powershell`，中文变 `�` | 0.3.0 起插件不再改编码（宿主的 `ENCODING_PREAMBLE` 已足够） | 先升级到 0.3.0 并重启；仍出现则检查脚本文件：**无 BOM 的 UTF-8 `.ps1` 会被 5.1 按 936 读取**，加 BOM 或改用 pwsh 7 |
 | 装了 dsh-ops，`pwsh` 仍不可见 | 联动没开，或 dsh-ops < 0.5.0 | 确认 dsh-ops 版本 ≥ 0.5.0；在 dsh-ops 插件页「其他」区打开「dsh-win-pwsh7 联动」；重启 DSH |
 | 升级 0.2.8 后 profile 里还有 `# dsh-win-pwsh7: ... (managed)` 块 | 旧版本写过的兼容覆盖，新版本不再管理 | 手动删除带该标记的整个块（不要动无标记的用户条目），重启 DSH |
 | 状态卡一直「检测中」或显示失败 | Remote 端点未挂载 / Host 行未激活 | 确认行是 active；重启 DSH；看 Host 日志里的 `dsh-win-pwsh7:` 前缀 |

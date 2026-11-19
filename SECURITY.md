@@ -48,5 +48,5 @@
 - UI Automation 使用的是与人类相同的 Store 页面与按钮，权限边界由 Windows / Store 决定；
 - 与 dsh-ops 的共存由 dsh-ops 0.5.0+ 的「dsh-win-pwsh7 联动」管理；本插件不修改 dsh-ops 本体，
   也不在 agent 作用域隐藏工具；
-- UTF-8 控制台桥是过渡层，会在每条 `pwsh` 命令前加 `chcp.com 65001 > $null;`，可用
-  `utf8Console: false` 关闭。
+- 编码不涉及权限边界：0.3.0 起本插件不再包装 `ctx.shell.execute`、也不再改控制台代码页
+  （过渡层已删除，理由见 [项目经验 04](docs/experience/04-嵌套pwsh乱码.md)）。

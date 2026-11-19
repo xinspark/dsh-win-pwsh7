@@ -10,7 +10,6 @@ package.json          name / exports / dsh.bundle.patch / dsh.client
 cordis.patch.yml      Host 行（单个 insert）
 index.js              Host 半：Config、apply、工具、gate、报告、安装作业、Remote 服务
 client.js             Web 半：配置卡 + 状态卡（UMD，无构建）
-lib/utf8-console-bridge.js 过渡层：包装 ctx.shell.execute
 lib/typert.host.js    构建期 typert 契约（status 端点）
 locale/*.json         包标题/描述（8 种官方语言各一份）
 docs/                 公开文档
@@ -33,7 +32,6 @@ tools/check-*.mjs     校验门
 
 | 挂载 | 作用 |
 | --- | --- |
-| `mountUtf8ConsoleBridge`（effect） | 包装 `ctx.shell.execute`，前缀 `chcp.com 65001`；可开关、可整体删除 |
 | `activationSweep` | 只检测并写日志，**不安装** |
 | `systemPrompt.section` | 注册 `tool:pwsh-runtime`，顺序取 `TOOL_PWSH`，文本由最近一次判定更新 |
 | 两个工具 | `pwsh7_status` / `pwsh7_install`，输出契约固定为 `{ report }` |
@@ -92,17 +90,17 @@ text block，所以模型看到的就是报告本身。
 ## 过渡层的独立删除契约
 
 dsh-ops 共存桥已在 0.2.8（IS#2）整体删除：dsh-ops 0.5.0 的 `pwsh7Link` 原生负责保持 `pwsh`
-可见，本插件不再写 profile、也不再隐藏工具。下面的表只剩 UTF-8 过渡层。
+可见，本插件不再写 profile、也不再隐藏工具。
 
-| 模块 | 删除方式 | 验收 |
-| --- | --- | --- |
-| UTF-8 控制台 | 删 `lib/utf8-console-bridge.js`、import/mount、`Config.utf8Console`、`tools/check-utf8-bridge.mjs` 及 check 链、README 的过渡说明 | `grep -rn "utf8-console-bridge\|utf8Console" index.js lib tools` 无结果 |
+UTF-8 控制台过渡层已在 0.3.0（IS#1）整体删除：文件、import/mount、`Config.utf8Console`、
+`tools/check-utf8-bridge.mjs` 与 `tools/utf8-removal.mjs`、check 链、以及 README/CHANGELOG 的
+过渡说明一起移除。判据与实测证据见[经验 04](../experience/04-嵌套pwsh乱码.md)。
 
-删除前先确认上游条件（见 [设计说明](../design.md) 与 [项目经验](../experience/README.md)）。
+现在没有任何"可整体删除的过渡模块"：再出现同类问题，做法是**新增一个独立模块 + 一条删除判据**，
+而不是复活这一层。
 
 ## 失败行为
 
 - 注册失败：`apply` 捕获并 warn，已注册的工具回滚，不抛到宿主；
-- UTF-8 桥形状不符：fail-open，原 executor 不动；
 - gate 刷新异常：保留上一份判定（fail closed），warn 日志带 `dsh-win-pwsh7:` 前缀；
 - Remote 不可用：客户端卡片显示本地化错误，不编造事实。

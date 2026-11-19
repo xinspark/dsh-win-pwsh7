@@ -15,7 +15,7 @@
 - Windows 10/11。
 - 已在 DSH **0.2.2-rc.5** 上验证（见 `package.json` 的 `dsh.verifiedAgainst`）。
 - 支持范围 `>=0.2.1-rc.3 <0.3.0-0`：收紧到"下一个预发布"会让 loader 在 DSH 每次小版本更新后**静默跳过**本插件
-  （不装、不报错、`pwsh` 失去 gate 和 UTF-8 过渡层），所以上界按**次版本**划。
+  （不装、不报错、`pwsh` 失去 gate），所以上界按**次版本**划。
 - 脚本安装需要 Microsoft Store 可用；手动安装只需要能打开 Store 页面。
 - 不需要管理员权限。
 
@@ -73,7 +73,6 @@ dsh plugin --profile desktop add dsh-win-pwsh7
 | 键 | 默认 | 说明 |
 |---|---|---|
 | `overridePath` | 未设 | 优先级①的显式 `pwsh.exe`。必须能启动并报告 PowerShell 7+；未通过校验就回落到自动探测。**只影响探测与推荐，不接线**。 |
-| `utf8Console` | `true` | 过渡层：Windows 下给 `pwsh` 工具的每条命令前加 `chcp.com 65001`，避免嵌套 `pwsh -File` 按 936 输出 GBK 后被按 UTF-8 解码成乱码。宿主修复后可删除。 |
 
 `overridePath` 是 `volatile()`：插件页配置区保存即生效；也可以写进 profile 补丁：
 
@@ -122,48 +121,28 @@ The executor resolves to the version-stable Store family alias: … Nothing to c
   `client.js` 里的界面字典刷新页面即可生效；
 - 新增文案必须同时补齐 8 本字典；`npm run check` 的 client 门会强校验键集一致、非空、`en` 无 CJK，以及 8 份 locale meta。
 
-## Windows UTF-8 控制台（过渡层）
+## Windows UTF-8 控制台（0.3.0 起已移除）
 
-DSH 的 `pwsh` 工具按 UTF-8 解码输出，但命令里再启动的 `pwsh -File` / `powershell -File` 会继承**控制台代码页**（简体中文机器通常是 936），输出 GBK，最终显示为 `�`。宿主的前缀只固定了外层进程的 .NET 编码，没有改控制台代码页。
+0.2.5 ~ 0.2.12 本插件带过一层过渡补丁：包装 `pwsh` 工具用的 `ctx.shell.execute`，在 Windows 命令前加
+`chcp.com 65001 > $null;`，用来避免「命令里再启动的 `pwsh -File` / `powershell -File` 继承控制台代码页
+936、输出 GBK、再被宿主按 UTF-8 解码成 `�`」。
 
-0.2.5 增加一个过渡层：包装 `pwsh` 工具使用的 `ctx.shell.execute`，在 Windows 上给每条命令前加 `chcp.com 65001 > $null;`。它只影响装了本插件的用户；默认开启，可用 `utf8Console: false` 关闭；宿主接口形状不符时 fail-open，不影响 `pwsh` 工具本身。
+0.3.0 删掉了它，依据是在 DSH `0.2.2-rc.5` 上的实测：**关掉这层之后**（`chcp` 报 936），宿主的
+`ENCODING_PREAMBLE`（`[Console]::OutputEncoding = UTF8`）已经让嵌套进程的输出以 UTF-8 抵达收集器：
 
-### 删除契约
+| 场景（无过渡层，控制台 936） | 结果 |
+| --- | --- |
+| `powershell -NoProfile -Command "Write-Output '嵌套中文测试'"` | 正常 |
+| 纯 ASCII 脚本里用 `[char]` 拼中文，`powershell -File` | 正常 |
+| 带 BOM 的 UTF-8 脚本，`powershell -File` | 正常 |
+| 以上两种脚本经嵌套 `pwsh -File` | 正常 |
 
-宿主发布同样的修复后，按这五步整块删除：
+⚠️ 一个容易混淆的相邻问题：**没有 BOM 的 UTF-8 `.ps1` 被 Windows PowerShell 5.1 按 936 读取**时，
+脚本里的中文会变成 `宓屽涓枃娴嬭瘯` 这类乱码。那是**脚本文件编码**问题，不是输出解码问题——给脚本加 BOM
+（`Set-Content -Encoding utf8BOM`）或统一用 pwsh 7 即可，本插件不再介入。
 
-1. 删 `lib/utf8-console-bridge.js`；
-2. 删 `index.js` 的 import 和 `mountUtf8ConsoleBridge(ctx, current)` 调用；
-3. 删 `Config.utf8Console`；
-4. 删 `tools/check-utf8-bridge.mjs` 与 `tools/utf8-removal.mjs`，并从 `package.json` 的 `check` 链里移除；
-5. 删本节和 CHANGELOG 里的 0.2.5 过渡说明。
-
-验收：`grep -rn "utf8-console-bridge\|utf8Console" index.js lib tools` 无结果 ——
-`node tools/utf8-removal.mjs --verify` 就是这条命令的可执行形式（还有引用就红）。
-
-### 判定上游已修复
-
-不用靠记性，跑一个工具：
-
-```powershell
-node tools/utf8-removal.mjs            # 0 = 仍需过渡层，1 = 上游已修（打印六步删除），2 = 判不出
-node tools/utf8-removal.mjs --cp936    # 第二条判据的实测：在 936 控制台下复刻宿主路径
-```
-
-它读 `@deepseek-ai/dsh-pwsh-local` 的 `ENCODING_PREAMBLE`，等价于下面两条判据的第一条：
-
-- `ENCODING_PREAMBLE` 自己包含 `chcp.com 65001` / `SetConsoleOutputCP`（可查上游
-  `packages/shell/pwsh-local/src/index.ts`，或安装包里的 `lib/index.js`）；
-- 在 CP936 控制台下，不装/关闭本插件时，命令里嵌套的 `pwsh -File` 已经输出 UTF-8。
-
-第二条现在也是可执行的判据：`--cp936` 先把控制台切到 936，再按宿主的顺序注入
-`ENCODING_PREAMBLE`，最后跑一个嵌套 `powershell` 打印中文、把 stdout **按 UTF-8 解码**——
-就是收集器的路径。它**先跑对照组**（不注入 preamble）：对照组如果本来就正常，这台机器分辨不出
-差别，工具答"判不出"，不猜。2026-11-19 在 pwsh 7.6.9 / DSH 0.2.2-rc.5 上：对照组乱码、实验组正常，
-即 preamble 已经让嵌套输出变成 UTF-8 —— 但真实宿主（无控制台、管道）需要关掉 `utf8Console`
-重启复核后才能删。
-
-删除前先在真实的 CP936 环境复跑一遍嵌套脚本，确认不再需要这层。
+配置项 `utf8Console` 随之删除。旧 profile 的 `cordis.patch.yml` 里若还写着它，升级后会报未知配置键，
+删掉那一行即可。
 
 ## 禁用或卸载
 
@@ -176,7 +155,7 @@ node tools/utf8-removal.mjs --cp936    # 第二条判据的实测：在 936 控�
 | Store 页面打开但没有「安装」按钮 | 确认 VPN 已关闭，完全退出并重启 Microsoft Store 后重试；或改用手动安装。 |
 | `pwsh` 仍运行 5.1 | 运行 `pwsh7_status`，按报告把 `pwshPath` 补丁粘进 profile 并重启；或安装 Store 版。 |
 | 插件页看不到 | 确认当前 profile 已启用 `dsh-win-pwsh7`，然后重启 DSH。 |
-| 命令里嵌套 `pwsh` 时中文变 `�` | 0.2.5 默认已由 `utf8Console` 过渡层处理；若手动关掉，重新开启，或在命令前加 `chcp.com 65001 > $null;`。 |
+| 命令里嵌套 `pwsh` 时中文变 `�` | 0.3.0 起本插件不再介入编码：宿主的 `ENCODING_PREAMBLE` 已足够。先升级到 0.3.0；若仍出现，检查是不是**脚本文件**本身没有 BOM 却被 5.1 按 936 读取（见上一节）。 |
 
 ## 验证
 
@@ -184,14 +163,13 @@ node tools/utf8-removal.mjs --cp936    # 第二条判据的实测：在 936 控�
 $env:DSH_APP_DIR = '<安装根>'        # 也可以是 resources/app 或 resources/app.asar
 node tools/check-host.mjs
 node tools/check-client.mjs
-node tools/check-utf8-bridge.mjs
 node tools/check-native-contracts.mjs
 node tools/check-docs.mjs
 node tools/reconcile-build.mjs --from <上一个验证过的内核版本>   # 需要联网
 ```
 
-五套门都可以离线复跑：`host` / `native` 需要 `DSH_APP_DIR` 指向安装根、`resources/app` 或
-`resources/app.asar`；`client` / `utf8` / `docs` 不依赖实例。`reconcile-build` 回答的是另一个
+四套门都可以离线复跑：`host` / `native` 需要 `DSH_APP_DIR` 指向安装根、`resources/app` 或
+`resources/app.asar`；`client` / `docs` 不依赖实例。`reconcile-build` 回答的是另一个
 问题——**两个构建之间动了多少**：它用同渠道的 npm tarball 逐文件比字节，升级后先用它决定要不要
 移植，再用门确认契约还在；因为需要联网，它不在门链里。覆盖范围与发布前实机清单见
 [验收记录](docs/testing.md)。

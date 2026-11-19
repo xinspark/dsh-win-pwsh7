@@ -19,14 +19,14 @@
 | 文档 | 内容 |
 | --- | --- |
 | [项目 README](../README.md) | 是什么、装什么、怎么安装 |
-| [配置项](guide/configuration.md) | `overridePath` / `utf8Console`、存储位置、生效方式 |
+| [配置项](guide/configuration.md) | `overridePath`、存储位置、生效方式 |
 | [故障排查](guide/troubleshooting.md) | 常见症状 → 原因 → 处理 |
 
 ## 我想理解它怎么工作
 
 | 文档 | 内容 |
 | --- | --- |
-| [设计说明](design.md) | 目标与取舍：执行器判定、gate、安装路径、共存桥、UTF-8 桥 |
+| [设计说明](design.md) | 目标与取舍：执行器判定、gate、安装路径、共存桥、一段已结束的编码过渡 |
 | [装配契约](reference/architecture.md) | 两半结构、槽位、服务与事件、typert、桥的挂载点 |
 | [原生契约](reference/native-contracts.md) | 依赖的上游符号、版本基线、逐项证据 |
 | [版本兼容](reference/compatibility.md) | 验证基线、`engines.dsh` 规则、DSH 升级对账流程 |

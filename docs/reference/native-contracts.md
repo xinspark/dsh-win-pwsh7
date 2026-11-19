@@ -50,7 +50,9 @@ comparable with the rc.1 table; hashes are:
   re-check, 41 after 0.2.11 added the slot checks);
   the contract rows below point at the rc.3 lines.
 - `dsh-pwsh-local` still pins only the .NET output encoding — **no `chcp`**, so the console code
-  page is still 936 on a zh-CN machine and the transitional UTF-8 bridge stays.
+  page is still 936 on a zh-CN machine. (At rc.3 that kept the transitional UTF-8 bridge; 0.3.0
+  removed the bridge after measuring that this preamble alone is enough — see the rc.3 → rc.5
+  section above.)
 - `dsh-shell/lib/index.js` still exports the `ShellExecutor` service registered as `ctx.shell`
   (`:83`); the pwsh executor still subclasses it.
 

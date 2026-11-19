@@ -21,7 +21,7 @@
 - **不需要批准的本地动作**：读代码/远端资料、跑门、改代码、本地 commit、本地 tag、写草稿/报告。
 - **不写密钥**：token、密码、账号 2FA 细节只留在系统凭据或 `docs-private/env/accounts.md`（该文件不入库）。
 - **公开文档不写本机路径 / 用户名 / 凭据**；需要举例时用 `<home>`、`<profile>` 占位。
-- **发布前五套门全绿**，且 `dsh.verifiedAgainst` 只写实际跑过 native 门的版本。
+- **发布前四套门全绿**，且 `dsh.verifiedAgainst` 只写实际跑过 native 门的版本。
 
 ## 3. 验证门
 
@@ -29,14 +29,13 @@
 $env:DSH_APP_DIR = '<install root>'      # 安装根 / resources/app / resources/app.asar
 node tools/check-host.mjs
 node tools/check-client.mjs
-node tools/check-utf8-bridge.mjs
 node tools/check-native-contracts.mjs
 node tools/check-docs.mjs
 node tools/reconcile-build.mjs --from <上一个验证过的内核版本>   # 不在门链里：需要联网
 ```
 
-- CI（`.github/workflows/ci.yml`）只跑 client + docs：其余三套需要真实 Windows DSH 安装；
-- `prepublishOnly` 跑 `npm run check`（五套）；
+- CI（`.github/workflows/ci.yml`）只跑 client + docs：其余两套需要真实 Windows DSH 安装；
+- `prepublishOnly` 跑 `npm run check`（四套）；
 - native 门变红时，先按 `docs/reference/native-contracts.md` 判断上游契约是否真的变了，**不要只改断言让它变绿**。
 
 ## 4. 发版流程
@@ -63,11 +62,11 @@ node tools/reconcile-build.mjs --from <上一个验证过的内核版本>   # �
 2. **先做包级对账**：`node tools/reconcile-build.mjs --from <上一个验证过的内核版本>` ——
    它比两个**发布构建**的 tarball（同渠道才可比），退出码 0 = 零迁移、1 = 有代码变化。
    同版本自检必须全绿，否则它量的是渠道差异（见 [经验 08](docs/experience/08-渠道不可比.md)）；
-3. 跑五套门；
+3. 跑四套门；
 4. 逐项核对：`PwshLocalExecutor.pwshPath` getter、`tools.guard` / `tools/pre-execute`、
    `configEditor.entries()`、`systemPrompt.getSectionOrder('TOOL_PWSH')`、两个客户端槽位；
-5. 检查 `@deepseek-ai/dsh-pwsh-local` 的 `ENCODING_PREAMBLE` 是否已让控制台不再需要
-   `chcp.com 65001`（`node tools/utf8-removal.mjs`）；注意上游可能换修法而不 pin 代码页；
+5. 编码由宿主负责（0.3.0 起本插件不再介入）：若怀疑编码契约变了，用「控制台停在 936、无任何前缀、
+   看嵌套输出」的对照实验重判，别凭印象改代码；
 6. 全绿后更新 `dsh.verifiedAgainst`、`docs/reference/native-contracts.md` 基线表、`CHANGELOG.md`；
 7. `engines.dsh` 的上界按次版本（`<X.<minor+1>.0-0`），不要绑到下一个补丁的预发布。
 
@@ -88,11 +87,13 @@ DSH 验证，`client.js` 里的界面字典刷新页面即可。
 
 ## 7. 当前状态（事实）
 
-- **0.2.12（已提交，未发布）**：基线抬到 DSH `0.2.2-rc.5`（桌面壳 2.0.24-next），
-  包级对账**零迁移**（12 个包在 rc.3 / rc.5 的发布构建之间逐文件字节相同）；新增
-  `tools/reconcile-build.mjs`（不进 `npm run check`，需要联网）；五套门全绿
-  （native 41 项、文档 24 篇）；实例已实机复核（`pwsh` 7.6.9 / `&&` / 65001 / 嵌套中文 /
-  `pwsh7_status` 报 Store 家族别名）；
+- **0.3.0（已提交，未发布）**：两个变化合并在一版——
+  ① 基线抬到 DSH `0.2.2-rc.5`（桌面壳 2.0.24-next），包级对账**零迁移**（12 个包在 rc.3 / rc.5
+  的发布构建之间逐文件字节相同），新增 `tools/reconcile-build.mjs`（不进 `npm run check`）；
+  ② **删除 UTF-8 过渡层**（`lib/utf8-console-bridge.js`、`Config.utf8Console`、
+  `tools/check-utf8-bridge.mjs`、`tools/utf8-removal.mjs` 与 check 链），依据是关掉它之后在
+  真实实例上的实测：`chcp` 回到 936，`powershell -Command` / ASCII 脚本 `-File` / 带 BOM 脚本
+  `-File` / 嵌套 `pwsh -File` 四组中文全正常。四套门全绿（native 40 项、文档 24 篇）；
 - 最新发布：npm `0.2.11`（2026-11-15），`dist-tags.latest = 0.2.11`，`gitHead = 3664bfd`，27 个文件，
   `shasum = 20f0692adc60d5eedee933598a760005e85eaba5`，带 SLSA provenance（Trusted Publishing）；
 - GitHub：tag `v0.2.11` → `3664bfd`；Release <https://github.com/XinSpark/dsh-win-pwsh7/releases/tag/v0.2.11>；

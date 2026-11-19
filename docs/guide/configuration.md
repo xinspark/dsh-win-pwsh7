@@ -1,13 +1,15 @@
 # 配置
 
-两个键都存在同一行配置里，写入方式是 **volatile row config**：插件页保存即生效；也可以写进
-profile 补丁，作为该行的初始值。**只有 `overridePath` 有插件页控件**；
-`utf8Console` 目前只通过 profile 补丁配置（它是过渡层，见 [经验 04](../experience/04-嵌套pwsh乱码.md)）。
+现在只有一个键：`overridePath`。写入方式是 **volatile row config**：插件页保存即生效；也可以写进
+profile 补丁，作为该行的初始值。
 
 | 键 | 类型 / 默认 | 作用 |
 | --- | --- | --- |
 | `overridePath` | string，未设 | 优先级 ① 的显式 `pwsh.exe`。必须能启动并报告 PowerShell 7+；未通过校验就回落到自动探测。**只影响探测与推荐，不给执行器接线。** |
-| `utf8Console` | boolean，默认 `true` | 过渡层：Windows 下给 `pwsh` 的每条命令前加 `chcp.com 65001`，避免嵌套 `pwsh -File` 按 936 输出 GBK 后被按 UTF-8 解码成乱码。 |
+
+0.3.0 删掉了过渡键 `utf8Console`（宿主自带的 `ENCODING_PREAMBLE` 已足够，见
+[经验 04](../experience/04-嵌套pwsh乱码.md)）。旧 profile 的补丁里若还写着它，升级后会报未知配置键，
+删掉那一行即可。
 
 ## 插件页
 
@@ -26,7 +28,6 @@ profile 补丁，作为该行的初始值。**只有 `overridePath` 有插件页
 - id: win-pwsh7
   config:
     overridePath: 'D:\tools\pwsh\pwsh.exe'
-    utf8Console: true
 ```
 
 注意：

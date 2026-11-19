@@ -1,10 +1,26 @@
 # Changelog
 
-## 0.2.12 — re-verified on DSH 0.2.2-rc.5, and the reconciliation that stopped lying
+## 0.3.0 — the UTF-8 console bridge is gone
 
-- **No runtime code changed.** The local instance moved from harness **0.2.2-rc.3** (desktop shell
-  2.0.23-next) to **0.2.2-rc.5** (shell 2.0.24-next). `dsh.verifiedAgainst` is now `0.2.2-rc.5`;
-  `engines.dsh` stays `>=0.2.1-rc.3 <0.3.0-0`, which already covers the build.
+- **Breaking: `Config.utf8Console` is removed**, together with `lib/utf8-console-bridge.js`,
+  `tools/check-utf8-bridge.mjs` and `tools/utf8-removal.mjs`, and their lines in the `check` chain.
+  A profile patch that still sets the key now reports an unknown config key — delete that line.
+- **Why it went: the Host's own preamble was already enough.** Measured on DSH 0.2.2-rc.5 with the
+  layer disabled **and the instance restarted** (`chcp` reports 936), four cases print Chinese
+  correctly: `powershell -Command`, an ASCII-only script building the sample from `[char]` through
+  `powershell -File`, a UTF-8 script **with BOM** through `powershell -File`, and both of those
+  through a nested `pwsh -File`. The isolating experiment runs a control **without**
+  `ENCODING_PREAMBLE` first — it mangles the sample — and only then with it; an experiment that
+  cannot reproduce the defect does not get to report success.
+- **The 0.2.5 root-cause note was half wrong, and that is now recorded.** The nested process does
+  emit GBK under code page 936, but the outer pwsh decodes it through `[Console]::OutputEncoding`
+  and re-encodes to UTF-8, so the collector never saw the bad bytes once the preamble was in place.
+  `docs/experience/04` keeps both the original reasoning and the evidence that retired it.
+- **A neighbouring problem is not ours**: a UTF-8 `.ps1` **without** a BOM is read as 936 by
+  Windows PowerShell 5.1 and its Chinese turns into mojibake (`宓屽涓枃娴嬭瘯`). Write the script
+  with a BOM (`-Encoding utf8BOM`) or stay on pwsh 7.
+- **Baseline moved to DSH 0.2.2-rc.5** (desktop shell 2.0.24-next); `dsh.verifiedAgainst` is now
+  `0.2.2-rc.5` and `engines.dsh` stays `>=0.2.1-rc.3 <0.3.0-0`, which already covers the build.
 - **Zero migration, measured.** `tools/reconcile-build.mjs` compares the twelve packages this plugin
   depends on across two published builds: every file both tarballs ship is byte-identical, with
   `package.json` the only difference. The archive itself did change (273,810,296 → 273,991,626
@@ -21,26 +37,19 @@
   are packaging artefacts (the archive drops `lib/types/**`: `dsh-tools` is 36 files there vs 66 in
   the tarball; it inlines dependencies: `dsh-config-editor` is 203 vs 18).
 - **Not gated, deliberately.** `tools/reconcile-build.mjs` needs the network, so it stays out of
-  `npm run check` next to `utf8-removal.mjs`; `npm run check:reconcile` runs it by hand.
-- **Upstream still does not pin the console code page.** `tools/utf8-removal.mjs` exits 0 with
-  `ENCODING_PREAMBLE still pins only the .NET output encoding`, so the transitional UTF-8 bridge
-  stays. Note the shape of upstream's fix: rc.5 added `PYTHONIOENCODING` to `ENV_OVERRIDES` rather
-  than a `chcp`, so "the exit code is 0" means *this bridge's condition still holds*, not that
-  upstream did nothing.
-- **The second removal criterion became an experiment.** `node tools/utf8-removal.mjs --cp936`
-  forces code page 936, injects the installed `ENCODING_PREAMBLE` in the host's order, prints Chinese
-  through a nested `powershell`, and decodes the raw stdout as UTF-8 — the collector's path. It runs a
-  control without the preamble first, because an experiment that cannot reproduce the defect proves
-  nothing when it reports success. First result on pwsh 7.6.9: the control run mangles the sample
-  (GBK bytes `c7b6cc…`), the preamble run returns `嵌套中文测试` — i.e. the preamble alone already
-  fixes nested output, and the bridge may be a second layer of the same protection. That is an
-  offline experiment on the spawn path, not the real Host (no console, piped `subprocess`), so the
-  bridge stays until `utf8Console: false` is checked on a restarted instance.
-- **Verified locally:** five gates green on DSH 0.2.2-rc.5 (host 2 tools / 1 prompt section, client
-  3 contributions / 8 dictionaries, UTF-8 bridge paths, native 41 checks on 12 coherent packages,
-  24 documents); live check on the restarted instance — `pwsh` runs 7.6.9, `echo a && echo b` chains,
-  `chcp` reports 65001, a nested `powershell` prints Chinese, and `pwsh7_status` reports the Store
-  family alias with nothing to configure.
+  `npm run check`; `npm run check:reconcile` runs it by hand.
+- **The removal criterion was an experiment, not a constant read.** The interim version of
+  `tools/utf8-removal.mjs` gained a `--cp936` mode: force code page 936, inject the installed
+  `ENCODING_PREAMBLE` in the host's order, print Chinese through a nested `powershell`, decode raw
+  stdout as UTF-8 — the collector's path — with a control run **without** the preamble first. On
+  pwsh 7.6.9 the control mangled the sample (`c7b6cc…`) and the preamble run returned the sample
+  intact, which is what pointed at the bridge being redundant before the live check confirmed it.
+  The tool was deleted with the bridge; the reasoning survives in `docs/experience/04`.
+- **Verified locally:** four gates green on DSH 0.2.2-rc.5 (host 2 tools / 1 prompt section, client
+  3 contributions / 8 dictionaries, native 40 checks on 12 coherent packages, 24 documents); live
+  check on the restarted instance with the bridge off — `chcp` reports 936, `pwsh` runs 7.6.9,
+  `echo a && echo b` chains, and all four nested-Chinese cases print correctly; `pwsh7_status`
+  reports the Store family alias with nothing to configure.
 
 ## 0.2.11 — one probe per executable, and two judgements that used to need a human
 

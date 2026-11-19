@@ -70,24 +70,23 @@ Microsoft Store 安装有两种磁盘形态：
 hide → restore 会互相触发。删除桥并没有否定那条教训——它说明隐藏工具应当由拥有工具面的
 插件负责，而不是由版本探测插件代劳。
 
-## 6. UTF-8 控制台桥是过渡层
+## 6. UTF-8 控制台桥：一段已结束的过渡（0.2.5 → 0.3.0）
 
-宿主收集器按 UTF-8 解码输出，但命令里再启动的 `pwsh -File` / `powershell -File` 会继承
-**控制台代码页**（简体中文机器通常是 936）并输出 GBK，于是中文变成 `�`。宿主的
-`ENCODING_PREAMBLE` 只固定外层进程的 .NET 编码，没有改控制台代码页。
+宿主收集器按 UTF-8 解码输出，而命令里再启动的 `pwsh -File` / `powershell -File` 会继承
+**控制台代码页**（简体中文机器通常是 936）；0.2.5 为此加过一层过渡补丁（包装 `ctx.shell.execute`，
+前缀 `chcp.com 65001 > $null;`）。
 
-0.2.5 起用 `lib/utf8-console-bridge.js` 包装 `ctx.shell.execute`，在 Windows 命令前加
-`chcp.com 65001 > $null;`。默认开启、可用 `utf8Console: false` 关闭、形状不符时 fail-open。
-上游修复后按 [README 的删除契约](../README.md) 整块删除；判定条件与证据见
-[经验 04](experience/04-嵌套pwsh乱码.md)。
+0.3.0 删掉了它。判据不是"上游有没有 pin 代码页"，而是**实测**：关掉这层、控制台停在 936 时，
+宿主的 `ENCODING_PREAMBLE`（`[Console]::OutputEncoding = UTF8`）已经让嵌套进程的输出以 UTF-8
+抵达收集器（`-Command`、ASCII 脚本 `-File`、带 BOM 的 UTF-8 脚本 `-File`、以及经嵌套 `pwsh -File`
+四组全对）。推理与证据见[经验 04](experience/04-嵌套pwsh乱码.md)。
 
-0.2.11 起这个判断不再靠记性：`node tools/utf8-removal.mjs` 读 `ENCODING_PREAMBLE` 给结论
-（0＝仍需过渡层 / 1＝上游已修、按六步删 / 2＝判不出），`--verify` 是删除后的验收（还有引用就红）。
-它读的是**安装目录**里的那份——桌面壳内置副本与 npm tarball 并非逐字节相同（0.2.12 实测：asar 里
-`dsh-pwsh-local` 已含 `PYTHONIOENCODING`，两个版本的 tarball 都没有）。
+⚠️ 一个容易混淆的相邻问题：**没有 BOM 的 UTF-8 `.ps1` 被 5.1 按 936 读取**会产生
+`宓屽涓枃娴嬭瘯` 这类乱码，那是**脚本文件编码**问题，不是输出解码问题，本插件不再介入。
 
-0.2.12 起升级对账也有一条命令：`node tools/reconcile-build.mjs --from <旧版本>` 同渠道比两个构建
-的 tarball，回答"动没动、动了几个文件"，与门（"契约还在不在"）分工。
+顺带留下的两件工具变得更重要，因为它们回答"下一个 DSH 版本要不要动手"：升级对账
+`node tools/reconcile-build.mjs --from <旧版本>`（同渠道比两个构建的 tarball 字节），
+与门（"契约还在不在"）分工。
 
 ## 7. 不能破的不变量
 
@@ -96,7 +95,7 @@ hide → restore 会互相触发。删除桥并没有否定那条教训——它
 | 不写执行器的 `pwshPath` | 插件只探测与推荐；接线是用户的 profile patch |
 | 不写 profile 补丁 | 共存由 dsh-ops 自己管理；插件只探测与推荐，不替用户改 bundle |
 | 只 pin 普通文件或 Store 家族别名 | 版本号目录会随 Store 更新移动 |
-| gate fail-closed，UTF-8 过渡层 fail-open | 前者关系到“会不会跑错运行时”，后者只是编码增强 |
+| gate fail-closed | 它关系到"会不会跑错运行时"，拦错比放过更安全 |
 | 八本字典同一套键（zh / en / ja / de / es / fr / pt / ru） | 缺一本会在切换语言时回退或漏字；client 门会拦 |
 | 插件自己的两个工具不被 gate | 否则被拦后没有恢复路径 |
 | 公开文档只写已发生的事实 | 计划与过程留在 `docs-private/`，避免文档变成愿望清单 |

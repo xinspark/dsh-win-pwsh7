@@ -8,29 +8,21 @@
 | --- | --- | --- |
 | `node tools/check-host.mjs` | 桩 Host 上下文下注册两个工具、`output.render`、报告/策略、gate 判定与刷新、安装作业与熔断、`engines.dsh` 形状、**每次状态调用 / 每次 gate 刷新对同一可执行文件只探一次**；静态断言 dsh-ops 兼容桥已删除 | 真实宿主交互、真实 Store |
 | `node tools/check-client.mjs` | 桩 React 渲染三份贡献：配置卡、状态卡、独立求星行（id/order 80/locale/按 subject 自过滤）；8 本字典键集/非空、`en` 无 CJK、8 份 `locale/*.json` meta | 外观、真实浏览器 |
-| `node tools/check-utf8-bridge.mjs` | 前缀、关闭开关、幂等、卸载恢复、形状不符 fail-open | 真实 CP936 控制台 |
-| `node tools/check-native-contracts.mjs` | 读本机 `app.asar`，核对 12 个包的 41 项符号/行为（getter、guard、pipeline、jobs、slots、编码 preamble 等），含客户端槽位的 `kind` 与渲染点 | 客户端槽位实机外观 |
+| `node tools/check-native-contracts.mjs` | 读本机 `app.asar`，核对 12 个包的 40 项符号/行为（getter、guard、pipeline、jobs、slots 等），含客户端槽位的 `kind` 与渲染点 | 客户端槽位实机外观 |
 | `node tools/check-docs.mjs` | 公开文档相对链接与锚点 | 文档内容正确性 |
 
-host / client / utf8 / native 四套门需要 Node 22+；native 与 host 还需要本机装有 DSH，
+host / client / native 三套门需要 Node 22+；native 与 host 还需要本机装有 DSH，
 用 `DSH_APP_DIR` 指定安装位置。CI 只跑 client 与 docs 两套（见
 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)）。
 
-另有一个**不进门链**的判定工具，专门服务 UTF-8 过渡层的删除：
-
-```powershell
-node tools/utf8-removal.mjs            # 退出码 0=仍需过渡层，1=上游已修（按六步删除），2=判不出
-node tools/utf8-removal.mjs --verify   # 删除后验收：还有引用就红
-```
-
-它不进 `npm run check`：判「上游已修」时**故意红**，把它放进日常门链会让每次发布都变成「要不要现在删桥」的
-人工判断；它按需跑，删除时随桥一起删掉（[README 删除契约](../README.md)第 4 步）。
+另有一个**不进门链**的判定工具，服务升级对账（`node tools/reconcile-build.mjs --from <旧内核版本>`）：
+它需要联网拉 npm tarball，所以不放日常门链。同版本自检必须全绿，否则它量的是渠道差异而不是版本差异
+（见[经验 08](experience/08-渠道不可比.md)）。
 
 ```powershell
 $env:DSH_APP_DIR = '<install root>'
 node tools/check-host.mjs
 node tools/check-client.mjs
-node tools/check-utf8-bridge.mjs
 node tools/check-native-contracts.mjs
 node tools/check-docs.mjs
 ```
@@ -47,7 +39,7 @@ node tools/check-docs.mjs
 | 6 | 恢复工具 | 被拦时 `pwsh7_status` / `pwsh7_install` 仍可调用 |
 | 7 | 安装脚本（可选） | VPN 确认门、Store 说明框、点击安装、作业可读/可取消；失败 3 次熔断 |
 | 8 | dsh-ops 共存（原生联动） | dsh-ops ≥ 0.5.0 打开「dsh-win-pwsh7 联动」：`pwsh` + `ops_bash` 并存，官方文件工具不重复；关掉联动后按 dsh-ops 自己的策略隐藏 `pwsh`；本插件不写 profile |
-| 9 | UTF-8 | CP936 机器上嵌套 `pwsh -File` 输出中文不再是 `�`；关掉 `utf8Console` 能复现 |
+| 9 | 编码（0.3.0 起插件不介入） | 控制台停在 936、无过渡层时，`powershell -Command`／`-File`（ASCII 脚本、带 BOM 脚本）与嵌套 `pwsh -File` 的中文都正常；`chcp` 应报 936 |
 | 10 | 卸载 | 插件行移除；gate 消失；本插件不写 profile 块，无残留；PowerShell 7 不被卸载 |
 
 ## 验收表
@@ -60,11 +52,11 @@ node tools/check-docs.mjs
 | 0.2.9 | 2.0.22-next / 0.2.2-rc.1 | 五套门全绿（native 38 项；文档 22 篇；client 门含路径选择按钮/隐藏 input/宿主路径桥断言） | profile 已安装 0.2.9；配置卡 `overridePath` 行含「选择...」按钮，Desktop 经 `__DSH_HOST_PATHS__.pathFor(file)` 回填绝对路径；工具面保持 88 项（`pwsh` + `ops_bash`，无重复官方文件/shell 工具） | [Release v0.2.9](https://github.com/XinSpark/dsh-win-pwsh7/releases/tag/v0.2.9) + `CHANGELOG.md` 0.2.9 |
 | 0.2.10 | 2.0.23-next / 0.2.2-rc.3 | 五套门全绿（native 38 项；文档 22 篇；native 表按 rc.3 重算） | profile 安装 0.2.10；`pwsh7_status` 正常；Slots 活跃；工具面保持 88 项（`pwsh` + `ops_bash`，无重复官方文件/shell 工具） | [Release v0.2.10](https://github.com/XinSpark/dsh-win-pwsh7/releases/tag/v0.2.10) + `CHANGELOG.md` 0.2.10 |
 | 0.2.11 | 2.0.23-next / 0.2.2-rc.3 | 五套门全绿（native 38 → **41** 项；文档 22 篇）；探针门**先红后绿**（每次调用 3 次探针 → 1 次） | 重启后生效（进程 07:43:32 启动，晚于 06:2x 的安装）：`pwsh` 跑 PowerShell 7.6.9 且 `echo a && echo b` 链通过；`chcp` 报 65001、嵌套 `powershell` 输出中文正常（过渡层仍在）；`pwsh7_status` 报 Store 家族别名 + Nothing to configure；`client.js` / `locale/` / `cordis.patch.yml` 与 0.2.10 **逐字节相同**，故槽位渲染无变化 | [Release v0.2.11](https://github.com/XinSpark/dsh-win-pwsh7/releases/tag/v0.2.11) + `CHANGELOG.md` 0.2.11 + `docs-private/release/0.2.11-reconcile.md` |
-| 0.2.12 | 2.0.24-next / 0.2.2-rc.5 | 五套门全绿（native 41 项；文档 24 篇）；包级对账**零迁移**（`tools/reconcile-build.mjs`：12 个包在 rc.3 与 rc.5 的 npm 构建之间逐文件字节相同） | 实例重启后复核：`pwsh` 7.6.9、`echo a && echo b` 链通过、`chcp` 报 65001、嵌套 `powershell` 输出中文正常；`pwsh7_status` 报 Store 家族别名 + Nothing to configure | `CHANGELOG.md` 0.2.12 + `docs/experience/08-渠道不可比.md` |
+| 0.3.0 | 2.0.24-next / 0.2.2-rc.5 | 四套门全绿（native 40 项；文档 24 篇）；包级对账**零迁移**（`tools/reconcile-build.mjs`：12 个包在 rc.3 与 rc.5 的 npm 构建之间逐文件字节相同） | 关掉过渡层后重启复测：`chcp` 报 **936**，`powershell -Command` / ASCII 脚本 `-File` / 带 BOM 脚本 `-File` / 嵌套 `pwsh -File` 四组中文全正常 → 过渡层删除；`pwsh7_status` 报 Store 家族别名 + Nothing to configure | `CHANGELOG.md` 0.3.0 + `docs/experience/04-嵌套pwsh乱码.md` |
 
 ## 说明
 
-- `prepublishOnly` 跑 `npm run check`（五套门）；发布工作流在 Linux 上只能跑 client 与
+- `prepublishOnly` 跑 `npm run check`（四套门）；发布工作流在 Linux 上只能跑 client 与
   docs，所以 host 三套门是**打 tag 前**的本机动作，不是 CI 的替代品；
 - `tools/reconcile-build.mjs` 也不在门链里：它要联网拉 npm tarball。升级后先跑它问"动了多少"，
   再跑门问"契约还在不在"；**同版本自检必须全绿**，否则它量的是渠道差异而不是版本差异

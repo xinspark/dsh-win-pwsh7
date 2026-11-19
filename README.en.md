@@ -20,8 +20,8 @@ default executor then chooses the runtime itself, and the plugin still never wri
 - Windows 10/11.
 - Verified on DSH **0.2.2-rc.5** (see `dsh.verifiedAgainst` in `package.json`).
 - Supported range: `>=0.2.1-rc.3 <0.3.0-0`. Ending the range at the next prerelease makes the
-  loader skip this bundle silently after every DSH patch release (no tools, no gate, no UTF-8
-  bridge), so the upper bound follows the **minor** line.
+  loader skip this bundle silently after every DSH patch release (no tools, no gate), so the upper
+  bound follows the **minor** line.
 - The script path needs Microsoft Store; the manual path only needs the Store page.
 - No administrator rights are required.
 
@@ -94,7 +94,6 @@ The count lives in the current process and resets when DSH restarts.
 | Key | Default | Meaning |
 |---|---|---|
 | `overridePath` | unset | Priority ① explicit `pwsh.exe`. It must spawn and report PowerShell 7+; a failed validation falls back to auto-detection. **It only changes probing and recommendations, not executor wiring.** |
-| `utf8Console` | `true` | Transitional: prefixes every `pwsh` tool command with `chcp.com 65001` on Windows, so a nested `pwsh -File` cannot emit GBK under code page 936 and be decoded as UTF-8. Removable once the Host ships the same fix. |
 
 `overridePath` is `volatile()`: the plugin-page configuration section saves it live; it can also be
 set in the profile patch:
@@ -160,41 +159,32 @@ live. The UI dictionaries live in `client.js` (`DICT_ZH` / `DICT_EN` / `DICT_JA`
 - New copy must be added to all eight dictionaries; the client gate in `npm run check` enforces
   identical key sets, non-empty values, no CJK in `en`, and the eight locale metas.
 
-## Windows UTF-8 console (transitional)
+## Windows UTF-8 console (removed in 0.3.0)
 
-The Host collector decodes `pwsh` output as UTF-8, but a `pwsh -File` / `powershell -File` started
-inside a tool command inherits the **console code page** (936 on a Simplified Chinese machine) and
-emits GBK, which then renders as `�`. The Host preamble pins the outer process's .NET encoding, not
-the console code page.
+0.2.5 – 0.2.12 carried a transitional layer: it wrapped the same `ctx.shell.execute` the `pwsh` tool
+uses and prefixed every Windows command with `chcp.com 65001 > $null;`, so a nested
+`pwsh -File` / `powershell -File` could not inherit console code page 936, emit GBK, and be decoded
+as `�` by the collector.
 
-0.2.5 adds a transitional layer: it wraps the same `ctx.shell.execute` the `pwsh` tool uses and
-prefixes every Windows command with `chcp.com 65001 > $null;`. It affects only this plugin's users,
-is on by default, can be disabled with `utf8Console: false`, and fails open when the Host shape
-does not match.
+0.3.0 removed it, based on a measurement on DSH `0.2.2-rc.5`: **with the layer off** (`chcp` reports
+936), the Host's own `ENCODING_PREAMBLE` (`[Console]::OutputEncoding = UTF8`) already gets nested
+output to the collector as UTF-8:
 
-### Removal contract
+| Case (no layer, console at 936) | Result |
+| --- | --- |
+| `powershell -NoProfile -Command "Write-Output '嵌套中文测试'"` | correct |
+| ASCII-only script building Chinese from `[char]`, `powershell -File` | correct |
+| UTF-8 script **with BOM**, `powershell -File` | correct |
+| both scripts through nested `pwsh -File` | correct |
 
-After the Host ships the same fix, delete the layer whole:
+⚠️ A neighbouring problem that is easy to confuse with this one: **a UTF-8 `.ps1` without a BOM is
+read by Windows PowerShell 5.1 as code page 936**, and the Chinese inside it turns into mojibake such
+as `宓屽涓枃娴嬭瘯`. That is a **script file encoding** problem, not an output decoding problem —
+write the script with a BOM (`Set-Content -Encoding utf8BOM`) or stay on pwsh 7. This plugin no
+longer takes part in either.
 
-1. delete `lib/utf8-console-bridge.js`;
-2. delete the import and `mountUtf8ConsoleBridge(ctx, current)` call in `index.js`;
-3. delete `Config.utf8Console`;
-4. delete `tools/check-utf8-bridge.mjs` and its entry in the `package.json` `check` chain;
-5. delete this section and the 0.2.5 transitional note in CHANGELOG.
-
-Acceptance: `grep -rn "utf8-console-bridge\|utf8Console" index.js lib tools` returns nothing.
-
-### Deciding that the Host has fixed it
-
-Either signal is enough to start removing the layer:
-
-- `@deepseek-ai/dsh-pwsh-local`'s own `ENCODING_PREAMBLE` includes the `chcp.com 65001` switch
-  (check `packages/shell/pwsh-local/src/index.ts` upstream, or `lib/index.js` in the installed
-  package);
-- with this plugin absent or `utf8Console` off, a nested `pwsh -File` under a CP936 console already
-  prints UTF-8.
-
-Re-run the nested script in a real CP936 environment before deleting.
+The `utf8Console` config key went with it. If an old profile's `cordis.patch.yml` still sets it, the
+upgrade reports an unknown config key — delete that line.
 
 ## Disable or uninstall
 
@@ -210,7 +200,7 @@ to 5.1, uninstall the Store build or pin the executor to `powershell.exe` (not r
 | The Store page opens without an Install button | Confirm the VPN is off, fully quit and restart Microsoft Store, then retry; or use the manual path. |
 | `pwsh` still runs 5.1 | Run `pwsh7_status`, paste the reported `pwshPath` patch into the profile, and restart; or install the Store build. |
 | The plugin page is missing | Confirm `dsh-win-pwsh7` is enabled in the current profile, then restart DSH. |
-| Chinese turns into `�` when a command nests `pwsh` | 0.2.5 handles it through `utf8Console`; if you disabled it, turn it back on or prefix the command with `chcp.com 65001 > $null;`. |
+| Chinese turns into `�` when a command nests `pwsh` | Since 0.3.0 this plugin no longer touches encoding: the Host's `ENCODING_PREAMBLE` is enough. Upgrade to 0.3.0 first; if it persists, check whether the **script file** has no BOM and is being read as 936 by 5.1 (see the section above). |
 
 ## Verification
 
@@ -218,14 +208,13 @@ to 5.1, uninstall the Store build or pin the executor to `powershell.exe` (not r
 $env:DSH_APP_DIR = '<install root>'        # or resources/app / resources/app.asar
 node tools/check-host.mjs
 node tools/check-client.mjs
-node tools/check-utf8-bridge.mjs
 node tools/check-native-contracts.mjs
 node tools/check-docs.mjs
 node tools/reconcile-build.mjs --from <previously verified kernel build>   # needs the network
 ```
 
-All five gates run offline; `host` / `native` need `DSH_APP_DIR` (install root, `resources/app`, or
-`resources/app.asar`), while `client` / `utf8` / `docs` do not need an installation.
+All four gates run offline; `host` / `native` need `DSH_APP_DIR` (install root, `resources/app`, or
+`resources/app.asar`), while `client` / `docs` do not need an installation.
 `reconcile-build` answers a different question — **how much moved between two builds**: it compares
 the npm tarballs of both builds file by file, so after an upgrade it decides whether a port is needed
 before the gates confirm the contracts still behave. It needs the network, which is why it is not in

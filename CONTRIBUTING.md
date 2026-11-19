@@ -19,7 +19,7 @@
 git clone https://github.com/XinSpark/dsh-win-pwsh7.git
 cd dsh-win-pwsh7
 $env:DSH_APP_DIR = '<install root>'   # 安装根 / resources/app / resources/app.asar
-npm run check                         # 五套门
+npm run check                         # 四套门
 ```
 
 装进 profile 有两种方式：
@@ -35,7 +35,7 @@ npm run check                         # 五套门
 ## 常用命令
 
 ```powershell
-npm run check            # host + client + utf8 + native + docs
+npm run check            # host + client + native + docs
 npm run check:docs       # 只跑文档链接与锚点
 npm run check:contracts  # 只跑 native contracts
 npm pack --dry-run       # 看发布包内容
@@ -49,11 +49,11 @@ npm pack --dry-run       # 看发布包内容
 | --- | --- |
 | `index.js` | Host 半：Config、apply、工具、gate、报告、安装作业、Remote |
 | `client.js` | Web 半：配置卡、状态卡、求星行（UMD，无构建） |
-| `lib/` | UTF-8 过渡桥、typert 契约 |
+| `lib/` | typert 契约 |
 | `locale/*.json` | 包标题/描述（8 种官方语言各一份） |
 | `docs/` | 公开文档，入口 [docs/README.md](docs/README.md) |
 | `docs-private/` | 私有文档；只有 README 入库 |
-| `tools/` | 校验门（host / client / utf8 / native / docs） |
+| `tools/` | 校验门（host / client / native / docs） |
 | `MAINTAINING.md` | 维护者手册（发版、审批、升级） |
 
 ## 代码风格

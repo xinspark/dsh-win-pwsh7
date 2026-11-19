@@ -46,7 +46,6 @@ import { Service } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { resolvePwshPath } from '@deepseek-ai/dsh-pwsh-local'
 import z from '@deepseek-ai/schemastery'
-import { mountUtf8ConsoleBridge } from './lib/utf8-console-bridge.js'
 
 export const name = 'dsh-win-pwsh7'
 export const inject = ['subprocess', 'tools', 'configEditor', 'systemPrompt']
@@ -62,9 +61,6 @@ export const inject = ['subprocess', 'tools', 'configEditor', 'systemPrompt']
  */
 export const Config = z.object({
   overridePath: z.string().volatile(),
-  // Transitional Windows console code page fix, owned by lib/utf8-console-bridge.js.
-  // Delete this field together with the bridge and its mount (see README removal contract).
-  utf8Console: z.boolean().default(true).volatile(),
 })
 
 /**
@@ -348,10 +344,6 @@ export function apply(ctx, config) {
   hostContext = ctx
   const state = runtimeState(ctx)
 
-  // Transitional, removable: delete this mount and lib/utf8-console-bridge.js once the Host
-  // pins the console code page itself. The README records the removal contract.
-  ctx.effect(() => mountUtf8ConsoleBridge(ctx, current), 'dsh-win-pwsh7: pin the Windows console code page for pwsh output')
-
   ctx.effect(() => {
     void activationSweep(ctx, current()).then((report) => {
       ctx.logger?.info?.('dsh-win-pwsh7: %s', flattenReport(report))
@@ -511,13 +503,11 @@ let hostContext = null
 function readRowConfig(ctx, fallback) {
   const merged = {
     overridePath: typeof fallback?.overridePath === 'string' ? fallback.overridePath : undefined,
-    utf8Console: fallback?.utf8Console !== false,
   }
   try {
     const entry = ctx.configEditor.entries().find((candidate) => candidate?.options?.name === 'dsh-win-pwsh7')
     const values = entry?.options?.config
     if (isSet(values?.overridePath)) merged.overridePath = String(values.overridePath)
-    if (values?.utf8Console !== undefined) merged.utf8Console = values.utf8Console !== false
   } catch { /* fall back to the captured config */ }
   return merged
 }
