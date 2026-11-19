@@ -13,7 +13,7 @@
 ## 验证环境
 
 - Windows 10/11。
-- 已在 DSH **0.2.2-rc.3** 上验证（见 `package.json` 的 `dsh.verifiedAgainst`）。
+- 已在 DSH **0.2.2-rc.5** 上验证（见 `package.json` 的 `dsh.verifiedAgainst`）。
 - 支持范围 `>=0.2.1-rc.3 <0.3.0-0`：收紧到"下一个预发布"会让 loader 在 DSH 每次小版本更新后**静默跳过**本插件
   （不装、不报错、`pwsh` 失去 gate 和 UTF-8 过渡层），所以上界按**次版本**划。
 - 脚本安装需要 Microsoft Store 可用；手动安装只需要能打开 Store 页面。
@@ -175,16 +175,19 @@ node tools/utf8-removal.mjs     # 0 = 仍需过渡层，1 = 上游已修（打�
 ## 验证
 
 ```powershell
-$env:DSH_APP_DIR = 'E:\FXS\APP\DSH NEXT\resources\app.asar'
+$env:DSH_APP_DIR = '<安装根>'        # 也可以是 resources/app 或 resources/app.asar
 node tools/check-host.mjs
 node tools/check-client.mjs
 node tools/check-utf8-bridge.mjs
 node tools/check-native-contracts.mjs
 node tools/check-docs.mjs
+node tools/reconcile-build.mjs --from <上一个验证过的内核版本>   # 需要联网
 ```
 
 五套门都可以离线复跑：`host` / `native` 需要 `DSH_APP_DIR` 指向安装根、`resources/app` 或
-`resources/app.asar`；`client` / `utf8` / `docs` 不依赖实例。覆盖范围与发布前实机清单见
+`resources/app.asar`；`client` / `utf8` / `docs` 不依赖实例。`reconcile-build` 回答的是另一个
+问题——**两个构建之间动了多少**：它用同渠道的 npm tarball 逐文件比字节，升级后先用它决定要不要
+移植，再用门确认契约还在；因为需要联网，它不在门链里。覆盖范围与发布前实机清单见
 [验收记录](docs/testing.md)。
 
 ## 文档

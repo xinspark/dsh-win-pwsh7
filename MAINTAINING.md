@@ -32,6 +32,7 @@ node tools/check-client.mjs
 node tools/check-utf8-bridge.mjs
 node tools/check-native-contracts.mjs
 node tools/check-docs.mjs
+node tools/reconcile-build.mjs --from <上一个验证过的内核版本>   # 不在门链里：需要联网
 ```
 
 - CI（`.github/workflows/ci.yml`）只跑 client + docs：其余三套需要真实 Windows DSH 安装；
@@ -59,12 +60,16 @@ node tools/check-docs.mjs
 ## 5. DSH 升级对账
 
 1. 记录新实例版本（桌面壳 + Harness 内核）；
-2. 跑五套门；
-3. 逐项核对：`PwshLocalExecutor.pwshPath` getter、`tools.guard` / `tools/pre-execute`、
+2. **先做包级对账**：`node tools/reconcile-build.mjs --from <上一个验证过的内核版本>` ——
+   它比两个**发布构建**的 tarball（同渠道才可比），退出码 0 = 零迁移、1 = 有代码变化。
+   同版本自检必须全绿，否则它量的是渠道差异（见 [经验 08](docs/experience/08-渠道不可比.md)）；
+3. 跑五套门；
+4. 逐项核对：`PwshLocalExecutor.pwshPath` getter、`tools.guard` / `tools/pre-execute`、
    `configEditor.entries()`、`systemPrompt.getSectionOrder('TOOL_PWSH')`、两个客户端槽位；
-4. 检查 `@deepseek-ai/dsh-pwsh-local` 的 `ENCODING_PREAMBLE` 是否已自带 `chcp.com 65001`；
-5. 全绿后更新 `dsh.verifiedAgainst`、`docs/reference/native-contracts.md` 基线表、`CHANGELOG.md`；
-6. `engines.dsh` 的上界按次版本（`<X.<minor+1>.0-0`），不要绑到下一个补丁的预发布。
+5. 检查 `@deepseek-ai/dsh-pwsh-local` 的 `ENCODING_PREAMBLE` 是否已让控制台不再需要
+   `chcp.com 65001`（`node tools/utf8-removal.mjs`）；注意上游可能换修法而不 pin 代码页；
+6. 全绿后更新 `dsh.verifiedAgainst`、`docs/reference/native-contracts.md` 基线表、`CHANGELOG.md`；
+7. `engines.dsh` 的上界按次版本（`<X.<minor+1>.0-0`），不要绑到下一个补丁的预发布。
 
 ## 6. 文档分层
 
@@ -83,6 +88,11 @@ DSH 验证，`client.js` 里的界面字典刷新页面即可。
 
 ## 7. 当前状态（事实）
 
+- **0.2.12（已提交，未发布）**：基线抬到 DSH `0.2.2-rc.5`（桌面壳 2.0.24-next），
+  包级对账**零迁移**（12 个包在 rc.3 / rc.5 的发布构建之间逐文件字节相同）；新增
+  `tools/reconcile-build.mjs`（不进 `npm run check`，需要联网）；五套门全绿
+  （native 41 项、文档 24 篇）；实例已实机复核（`pwsh` 7.6.9 / `&&` / 65001 / 嵌套中文 /
+  `pwsh7_status` 报 Store 家族别名）；
 - 最新发布：npm `0.2.11`（2026-11-15），`dist-tags.latest = 0.2.11`，`gitHead = 3664bfd`，27 个文件，
   `shasum = 20f0692adc60d5eedee933598a760005e85eaba5`，带 SLSA provenance（Trusted Publishing）；
 - GitHub：tag `v0.2.11` → `3664bfd`；Release <https://github.com/XinSpark/dsh-win-pwsh7/releases/tag/v0.2.11>；

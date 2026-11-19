@@ -18,7 +18,7 @@ default executor then chooses the runtime itself, and the plugin still never wri
 ## Verified environment
 
 - Windows 10/11.
-- Verified on DSH **0.2.2-rc.3** (see `dsh.verifiedAgainst` in `package.json`).
+- Verified on DSH **0.2.2-rc.5** (see `dsh.verifiedAgainst` in `package.json`).
 - Supported range: `>=0.2.1-rc.3 <0.3.0-0`. Ending the range at the next prerelease makes the
   loader skip this bundle silently after every DSH patch release (no tools, no gate, no UTF-8
   bridge), so the upper bound follows the **minor** line.
@@ -215,17 +215,21 @@ to 5.1, uninstall the Store build or pin the executor to `powershell.exe` (not r
 ## Verification
 
 ```powershell
-$env:DSH_APP_DIR = 'E:\FXS\APP\DSH NEXT\resources\app.asar'
+$env:DSH_APP_DIR = '<install root>'        # or resources/app / resources/app.asar
 node tools/check-host.mjs
 node tools/check-client.mjs
 node tools/check-utf8-bridge.mjs
 node tools/check-native-contracts.mjs
 node tools/check-docs.mjs
+node tools/reconcile-build.mjs --from <previously verified kernel build>   # needs the network
 ```
 
 All five gates run offline; `host` / `native` need `DSH_APP_DIR` (install root, `resources/app`, or
-`resources/app.asar`), while `client` / `utf8` / `docs` do not need an installation. Coverage and the
-pre-release manual checklist are in [docs/testing.md](docs/testing.md).
+`resources/app.asar`), while `client` / `utf8` / `docs` do not need an installation.
+`reconcile-build` answers a different question — **how much moved between two builds**: it compares
+the npm tarballs of both builds file by file, so after an upgrade it decides whether a port is needed
+before the gates confirm the contracts still behave. It needs the network, which is why it is not in
+the gate chain. Coverage and the pre-release manual checklist are in [docs/testing.md](docs/testing.md).
 
 ## Documentation
 

@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.2.12 — re-verified on DSH 0.2.2-rc.5, and the reconciliation that stopped lying
+
+- **No runtime code changed.** The local instance moved from harness **0.2.2-rc.3** (desktop shell
+  2.0.23-next) to **0.2.2-rc.5** (shell 2.0.24-next). `dsh.verifiedAgainst` is now `0.2.2-rc.5`;
+  `engines.dsh` stays `>=0.2.1-rc.3 <0.3.0-0`, which already covers the build.
+- **Zero migration, measured.** `tools/reconcile-build.mjs` compares the twelve packages this plugin
+  depends on across two published builds: every file both tarballs ship is byte-identical, with
+  `package.json` the only difference. The archive itself did change (273,810,296 → 273,991,626
+  bytes) while none of the packages did — size is not evidence.
+- **The first version of that tool reported a false change**, which is why it now ships with a rule
+  instead of a table. The shell carries its own copy of each package inside `app.asar`, and that copy
+  is not byte-identical to the published tarball of the same version: `dsh-pwsh-local/lib/index.js`
+  in the archive is 17,001 bytes with `PYTHONIOENCODING: "utf-8"`, while **both** rc.3 and rc.5
+  tarballs ship 16,816 bytes without it. Comparing the installed copy against the previous version's
+  tarball reported that pre-existing **channel drift** as a version change. The tool now compares
+  tarball to tarball (which decides the verdict) and prints channel drift separately as known noise.
+- **Two measurement rules are now written down** in `docs/reference/native-contracts.md`: only files
+  both channels ship can be compared, and only bytes answer "unchanged" — file counts and byte totals
+  are packaging artefacts (the archive drops `lib/types/**`: `dsh-tools` is 36 files there vs 66 in
+  the tarball; it inlines dependencies: `dsh-config-editor` is 203 vs 18).
+- **Not gated, deliberately.** `tools/reconcile-build.mjs` needs the network, so it stays out of
+  `npm run check` next to `utf8-removal.mjs`; `npm run check:reconcile` runs it by hand.
+- **Upstream still does not pin the console code page.** `tools/utf8-removal.mjs` exits 0 with
+  `ENCODING_PREAMBLE still pins only the .NET output encoding`, so the transitional UTF-8 bridge
+  stays. Note the shape of upstream's fix: rc.5 added `PYTHONIOENCODING` to `ENV_OVERRIDES` rather
+  than a `chcp`, so "the exit code is 0" means *this bridge's condition still holds*, not that
+  upstream did nothing.
+- **Verified locally:** five gates green on DSH 0.2.2-rc.5 (host 2 tools / 1 prompt section, client
+  3 contributions / 8 dictionaries, UTF-8 bridge paths, native 41 checks on 12 coherent packages,
+  24 documents); live check on the restarted instance — `pwsh` runs 7.6.9, `echo a && echo b` chains,
+  `chcp` reports 65001, a nested `powershell` prints Chinese, and `pwsh7_status` reports the Store
+  family alias with nothing to configure.
+
 ## 0.2.11 — one probe per executable, and two judgements that used to need a human
 
 - **A reading cycle probes each executable once.** `overridePath`, an executor row and

@@ -60,10 +60,14 @@ node tools/check-docs.mjs
 | 0.2.9 | 2.0.22-next / 0.2.2-rc.1 | 五套门全绿（native 38 项；文档 22 篇；client 门含路径选择按钮/隐藏 input/宿主路径桥断言） | profile 已安装 0.2.9；配置卡 `overridePath` 行含「选择...」按钮，Desktop 经 `__DSH_HOST_PATHS__.pathFor(file)` 回填绝对路径；工具面保持 88 项（`pwsh` + `ops_bash`，无重复官方文件/shell 工具） | [Release v0.2.9](https://github.com/XinSpark/dsh-win-pwsh7/releases/tag/v0.2.9) + `CHANGELOG.md` 0.2.9 |
 | 0.2.10 | 2.0.23-next / 0.2.2-rc.3 | 五套门全绿（native 38 项；文档 22 篇；native 表按 rc.3 重算） | profile 安装 0.2.10；`pwsh7_status` 正常；Slots 活跃；工具面保持 88 项（`pwsh` + `ops_bash`，无重复官方文件/shell 工具） | [Release v0.2.10](https://github.com/XinSpark/dsh-win-pwsh7/releases/tag/v0.2.10) + `CHANGELOG.md` 0.2.10 |
 | 0.2.11 | 2.0.23-next / 0.2.2-rc.3 | 五套门全绿（native 38 → **41** 项；文档 22 篇）；探针门**先红后绿**（每次调用 3 次探针 → 1 次） | 重启后生效（进程 07:43:32 启动，晚于 06:2x 的安装）：`pwsh` 跑 PowerShell 7.6.9 且 `echo a && echo b` 链通过；`chcp` 报 65001、嵌套 `powershell` 输出中文正常（过渡层仍在）；`pwsh7_status` 报 Store 家族别名 + Nothing to configure；`client.js` / `locale/` / `cordis.patch.yml` 与 0.2.10 **逐字节相同**，故槽位渲染无变化 | [Release v0.2.11](https://github.com/XinSpark/dsh-win-pwsh7/releases/tag/v0.2.11) + `CHANGELOG.md` 0.2.11 + `docs-private/release/0.2.11-reconcile.md` |
+| 0.2.12 | 2.0.24-next / 0.2.2-rc.5 | 五套门全绿（native 41 项；文档 24 篇）；包级对账**零迁移**（`tools/reconcile-build.mjs`：12 个包在 rc.3 与 rc.5 的 npm 构建之间逐文件字节相同） | 实例重启后复核：`pwsh` 7.6.9、`echo a && echo b` 链通过、`chcp` 报 65001、嵌套 `powershell` 输出中文正常；`pwsh7_status` 报 Store 家族别名 + Nothing to configure | `CHANGELOG.md` 0.2.12 + `docs/experience/08-渠道不可比.md` |
 
 ## 说明
 
 - `prepublishOnly` 跑 `npm run check`（五套门）；发布工作流在 Linux 上只能跑 client 与
   docs，所以 host 三套门是**打 tag 前**的本机动作，不是 CI 的替代品；
+- `tools/reconcile-build.mjs` 也不在门链里：它要联网拉 npm tarball。升级后先跑它问"动了多少"，
+  再跑门问"契约还在不在"；**同版本自检必须全绿**，否则它量的是渠道差异而不是版本差异
+  （见[经验 08](experience/08-渠道不可比.md)）；
 - 端到端 Store 安装是发布证据，不是自动化门的一部分；自动化门里的 Store 脚本由桩数据驱动；
 - 任何一项未跑，不要把版本写成“已验证”。

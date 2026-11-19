@@ -8,13 +8,34 @@ Public documentation starts at [docs/README.md](../README.md); the upgrade check
 
 ## Baseline
 
-- DSH build: **0.2.2-rc.3** (every package below reports this version); desktop shell
-  **2.0.23-next**, `app.asar` 273,810,296 bytes.
-- Plugin baseline: **0.2.11** (`package.json` `dsh.verifiedAgainst` = **0.2.2-rc.3**). 0.2.10 was a
-  baseline-only release on the same build; 0.2.9 shipped against **0.2.2-rc.1**; 0.2.6 loaded on that
-  same build; 0.2.5 was verified against **0.2.1-rc.3 / rc.4**. The rc.1 → rc.3 re-check is what this
-  file and `tools/check-native-contracts.mjs` now cover; 0.2.11 added the three slot checks.
+- DSH build: **0.2.2-rc.5** (every package below reports this version); desktop shell
+  **2.0.24-next**, `app.asar` 273,991,626 bytes (the rc.3 archive was 273,810,296 — the archive did
+  change, while every package this plugin depends on did not).
+- Plugin baseline: **0.2.12** (`package.json` `dsh.verifiedAgainst` = **0.2.2-rc.5**). 0.2.11 was the
+  probe-cost release on **0.2.2-rc.3** and added the three slot checks; 0.2.10 was baseline-only on
+  that same build; 0.2.9 shipped against **0.2.2-rc.1**; 0.2.6 loaded on that same build; 0.2.5 was
+  verified against **0.2.1-rc.3 / rc.4**.
 - The plugin itself is installed from a tarball; this file is about the **harness**, not the plugin.
+
+### Package-level reconciliation, 0.2.2-rc.3 → 0.2.2-rc.5
+
+`node tools/reconcile-build.mjs --from 0.2.2-rc.3` — **zero migration**. All twelve packages are
+byte-identical between the two published builds once `package.json` is excluded (the version field
+is the only thing that changes there). The contracts below therefore did not move; the gate's 41
+checks pass on rc.5 without a single assertion change.
+
+Two measurement rules earned their place here, and both are now built into the tool:
+
+1. **Compare tarball to tarball.** The desktop shell carries its own copy of each package inside
+   `app.asar`, and that copy is **not** byte-identical to the published tarball of the same version:
+   `dsh-pwsh-local/lib/index.js` in the archive is 17,001 bytes with `PYTHONIOENCODING: "utf-8"` in
+   `ENV_OVERRIDES`, while both rc.3 and rc.5 tarballs ship 16,816 bytes without it. Comparing the
+   installed copy against the *previous* version's tarball reports that pre-existing channel drift as
+   a version change — a false positive that would have justified a pointless migration.
+2. **File counts and byte totals are not evidence.** The archive drops `lib/types/**` (`dsh-tools`:
+   36 files here vs 66 in the tarball) and inlines nested dependencies (`dsh-config-editor` carries
+   its own `node_modules/js-yaml`, 203 files vs 18). Only files **both** sides ship can be compared,
+   and only byte equality answers "unchanged".
 
 ### Package-level reconciliation, 0.2.2-rc.1 → 0.2.2-rc.3
 
@@ -35,22 +56,23 @@ comparable with the rc.1 table; hashes are:
 
 File counts and bytes are the package subtree inside `app.asar`; `lib/index.js sha256` is the first
 16 hex characters of the file the contract was read from. Recompute them on the next upgrade
-instead of trusting this table.
+instead of trusting this table. **Every value below is identical to what the rc.3 table recorded** —
+that is the finding of the rc.3 → rc.5 reconciliation above, not a copy-paste.
 
 | Package | Version | Files / bytes | `lib/index.js` sha256(16) |
 |---|---|---|---|
-| dsh-tools | 0.2.2-rc.3 | 36 / 400,536 | `bf71a6ce1e95c5df` |
-| dsh-pwsh-sandbox | 0.2.2-rc.3 | 16 / 49,139 | `bed19d2cea875b15` |
-| dsh-tool-pwsh | 0.2.2-rc.3 | 17 / 120,098 | `03a29fb9cff98766` |
-| dsh-pwsh-local | 0.2.2-rc.3 | 16 / 68,974 | `6bea799112c6c282` |
-| dsh-shell | 0.2.2-rc.3 | 9 / 46,522 | `6c5aa32fda2d92ef` |
-| dsh-jobs | 0.2.2-rc.3 | 18 / 73,886 | `5a211fa87fba8054` |
-| dsh-jobs-local | 0.2.2-rc.3 | 18 / 105,943 | `8ff369369641d059` |
-| dsh-config-editor | 0.2.2-rc.3 | 203 / 1,022,168 | `17e953c5ef913d36` |
-| dsh-system-prompt | 0.2.2-rc.3 | 15 / 84,930 | `619c2f5d6291377e` |
-| dsh-subprocess | 0.2.2-rc.3 | 11 / 66,435 | `04ae23eb9704bb8b` |
-| dsh-agent | 0.2.2-rc.3 | 30 / 198,439 | `bc2a39dea1174c2b` |
-| dsh-scope | 0.2.2-rc.3 | 8 / 44,483 | `2829df71d76e0894` |
+| dsh-tools | 0.2.2-rc.5 | 36 / 400,536 | `bf71a6ce1e95c5df` |
+| dsh-pwsh-sandbox | 0.2.2-rc.5 | 16 / 49,139 | `bed19d2cea875b15` |
+| dsh-tool-pwsh | 0.2.2-rc.5 | 17 / 120,098 | `03a29fb9cff98766` |
+| dsh-pwsh-local | 0.2.2-rc.5 | 16 / 68,974 | `6bea799112c6c282` |
+| dsh-shell | 0.2.2-rc.5 | 9 / 46,522 | `6c5aa32fda2d92ef` |
+| dsh-jobs | 0.2.2-rc.5 | 18 / 73,886 | `5a211fa87fba8054` |
+| dsh-jobs-local | 0.2.2-rc.5 | 18 / 105,943 | `8ff369369641d059` |
+| dsh-config-editor | 0.2.2-rc.5 | 203 / 1,022,168 | `17e953c5ef913d36` |
+| dsh-system-prompt | 0.2.2-rc.5 | 15 / 84,930 | `619c2f5d6291377e` |
+| dsh-subprocess | 0.2.2-rc.5 | 11 / 66,435 | `04ae23eb9704bb8b` |
+| dsh-agent | 0.2.2-rc.5 | 30 / 198,439 | `bc2a39dea1174c2b` |
+| dsh-scope | 0.2.2-rc.5 | 8 / 44,483 | `2829df71d76e0894` |
 
 `dsh-tools/lib/pipeline.js` (35,733 bytes) sha256(16) = `679072e59502fc21`. The contract below
 cites its symbols, not this hash.
@@ -93,16 +115,18 @@ cites its symbols, not this hash.
 
 ```powershell
 $env:DSH_APP_DIR = 'E:\FXS\APP\DSH NEXT\resources\app.asar'   # install root, resources/app, or app.asar
-node tools/check-native-contracts.mjs
+node tools/reconcile-build.mjs --from <previous build>             # how much moved: tarball vs tarball
+node tools/check-native-contracts.mjs                              # do the contracts still behave
 ```
 
-On an upgrade: rerun the gate, recompute the package table, and update the baseline only after the
+On an upgrade: run the reconciliation first (it says whether the baseline bump is a declaration or a
+migration), then the gate, then recompute the package table, and update the baseline only after the
 gate is green. Do not claim a build is verified against a DSH version the gate has not seen.
 
 ## Known limits
 
-- The rc.1 → 0.2.2-rc.3 snapshot lives in this file (the delta section above). Older tables live in
-  git history; capture the current table before the next baseline jump.
+- The rc.1 → 0.2.2-rc.3 and rc.3 → 0.2.2-rc.5 snapshots live in this file (the delta sections above).
+  Older tables live in git history; capture the current table before the next baseline jump.
 - The client slot names are checked against the live page, not by this gate; the client half's own
   gate covers its registrations. A slot rename remains a release-time inspection item.
 - `engines.dsh` is a second gate on the same upgrade: the loader **skips a bundle whose range the

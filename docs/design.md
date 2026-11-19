@@ -83,6 +83,11 @@ hide → restore 会互相触发。删除桥并没有否定那条教训——它
 
 0.2.11 起这个判断不再靠记性：`node tools/utf8-removal.mjs` 读 `ENCODING_PREAMBLE` 给结论
 （0＝仍需过渡层 / 1＝上游已修、按六步删 / 2＝判不出），`--verify` 是删除后的验收（还有引用就红）。
+它读的是**安装目录**里的那份——桌面壳内置副本与 npm tarball 并非逐字节相同（0.2.12 实测：asar 里
+`dsh-pwsh-local` 已含 `PYTHONIOENCODING`，两个版本的 tarball 都没有）。
+
+0.2.12 起升级对账也有一条命令：`node tools/reconcile-build.mjs --from <旧版本>` 同渠道比两个构建
+的 tarball，回答"动没动、动了几个文件"，与门（"契约还在不在"）分工。
 
 ## 7. 不能破的不变量
 
