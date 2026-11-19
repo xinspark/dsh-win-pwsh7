@@ -104,7 +104,7 @@ DSH 验证，`client.js` 里的界面字典刷新页面即可。
   `chcp` 936、四组编码正常、`pwsh7_status` 正常、插件页配置卡只剩「PowerShell 7 路径」一项、
   旁路工具 `ops_bash` 中文正常；回滚材料：`node_modules/dsh-win-pwsh7.bak-0.2.11`、
   `package.json.bak-20261119-0945`、`pnpm-lock.yaml.bak-20261119-0945`；
-- 最新发布：npm `0.2.11`（2026-11-15），`dist-tags.latest = 0.2.11`，`gitHead = 3664bfd`，27 个文件，
+- 0.2.11（回看）：npm `0.2.11`（2026-11-15），`gitHead = 3664bfd`，27 个文件，
   `shasum = 20f0692adc60d5eedee933598a760005e85eaba5`，带 SLSA provenance（Trusted Publishing）；
 - GitHub：tag `v0.2.11` → `3664bfd`；Release <https://github.com/XinSpark/dsh-win-pwsh7/releases/tag/v0.2.11>；
   Actions：`ci` run `43647156761` success、`publish` run `43647161190` success（24s）；
