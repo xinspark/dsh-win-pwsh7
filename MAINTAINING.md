@@ -87,7 +87,13 @@ DSH 验证，`client.js` 里的界面字典刷新页面即可。
 
 ## 7. 当前状态（事实）
 
-- **0.3.0（已提交，未发布）**：两个变化合并在一版——
+- **0.3.0 已发布（2026-11-19）**：npm `dist-tags.latest = 0.3.0`，`gitHead = f9a4384`，25 个文件，
+  `shasum = e7db8b2b1ab0ac7526acb7b1c518f454b4c4fec5`，`integrity = sha512-zTv1t6YEt…`，带 SLSA
+  provenance（Trusted Publishing）；Actions `ci` run `44441084461`、`publish` run `44441090815` 均 success；
+  Release <https://github.com/XinSpark/dsh-win-pwsh7/releases/tag/v0.3.0>；issue #1 已关闭并留下复核记录。
+  ⚠️ npm 发布后有一段**异步处理期**：工作流最后一行是 "Your package is being processed and may take a
+  few minutes"，约 20 秒后 registry 才可见；期间的 404 / 旧 `dist-tags` **不是失败信号**。
+- 0.3.0 的两个变化合并在一版——
   ① 基线抬到 DSH `0.2.2-rc.5`（桌面壳 2.0.24-next），包级对账**零迁移**（12 个包在 rc.3 / rc.5
   的发布构建之间逐文件字节相同），新增 `tools/reconcile-build.mjs`（不进 `npm run check`）；
   ② **删除 UTF-8 过渡层**（`lib/utf8-console-bridge.js`、`Config.utf8Console`、
