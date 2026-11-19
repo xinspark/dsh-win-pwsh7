@@ -146,7 +146,8 @@ DSH 的 `pwsh` 工具按 UTF-8 解码输出，但命令里再启动的 `pwsh -Fi
 不用靠记性，跑一个工具：
 
 ```powershell
-node tools/utf8-removal.mjs     # 0 = 仍需过渡层，1 = 上游已修（打印六步删除），2 = 判不出
+node tools/utf8-removal.mjs            # 0 = 仍需过渡层，1 = 上游已修（打印六步删除），2 = 判不出
+node tools/utf8-removal.mjs --cp936    # 第二条判据的实测：在 936 控制台下复刻宿主路径
 ```
 
 它读 `@deepseek-ai/dsh-pwsh-local` 的 `ENCODING_PREAMBLE`，等价于下面两条判据的第一条：
@@ -155,7 +156,12 @@ node tools/utf8-removal.mjs     # 0 = 仍需过渡层，1 = 上游已修（打�
   `packages/shell/pwsh-local/src/index.ts`，或安装包里的 `lib/index.js`）；
 - 在 CP936 控制台下，不装/关闭本插件时，命令里嵌套的 `pwsh -File` 已经输出 UTF-8。
 
-第二条需要真实 CP936 控制台，工具无法离线判定 —— 它会如实说"判不出"，不猜。
+第二条现在也是可执行的判据：`--cp936` 先把控制台切到 936，再按宿主的顺序注入
+`ENCODING_PREAMBLE`，最后跑一个嵌套 `powershell` 打印中文、把 stdout **按 UTF-8 解码**——
+就是收集器的路径。它**先跑对照组**（不注入 preamble）：对照组如果本来就正常，这台机器分辨不出
+差别，工具答"判不出"，不猜。2026-11-19 在 pwsh 7.6.9 / DSH 0.2.2-rc.5 上：对照组乱码、实验组正常，
+即 preamble 已经让嵌套输出变成 UTF-8 —— 但真实宿主（无控制台、管道）需要关掉 `utf8Console`
+重启复核后才能删。
 
 删除前先在真实的 CP936 环境复跑一遍嵌套脚本，确认不再需要这层。
 

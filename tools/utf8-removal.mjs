@@ -19,10 +19,16 @@
  *     criterion), 1 with the leftover list. Run it *after* deleting, and delete this file with the
  *     bridge (README removal contract, step 4).
  *
- * The second judgement in the README — "a nested `pwsh -File` under code page 936 already emits
- * UTF-8 without this plugin" — needs a real CP936 console and cannot be decided offline; this tool
- * says so instead of guessing.
+ *   node tools/utf8-removal.mjs --cp936
+ *     The README's second criterion as an experiment instead of a caveat: apply the installed
+ *     `ENCODING_PREAMBLE`, force `chcp.com 936`, run a nested `powershell -Command` that prints
+ *     Chinese, and decode its stdout as UTF-8 — exactly the path the collector takes. A control run
+ *     without the preamble comes first, because an experiment that cannot reproduce the defect
+ *     proves nothing when it reports success (`exp-probe-needs-positive-control`). Exits 1 when the
+ *     nested output already survives (upstream fixed it another way), 0 while it is still mangled,
+ *     2 when the machine cannot answer (not Windows, no `pwsh`, or the control run came back clean).
  */
+import { spawnSync } from 'node:child_process'
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -31,6 +37,13 @@ import { resolveAppModulesDir } from './dsh-app-modules.mjs'
 
 const REPO = dirname(dirname(fileURLToPath(import.meta.url)))
 const verifyOnly = process.argv.includes('--verify')
+const cp936Only = process.argv.includes('--cp936')
+
+/** The sample must be non-ASCII, or every console encoding would look correct. */
+const CP936_SAMPLE = '嵌套中文测试'
+
+/** Replacement character — what the collector emits for bytes that are not valid UTF-8. */
+const REPLACEMENT = '\uFFFD'
 
 /** Every name the bridge answers to, in code, config and prose. */
 const MARKERS = ['utf8-console-bridge', 'utf8Console', 'UTF8_CONSOLE_PATCH', 'utf8Command', 'chcp.com 65001']
@@ -74,7 +87,7 @@ function references() {
 
 /**
  * Ask the installed build whether it pins the console code page itself.
- * @returns `{ verdict: 'fixed' | 'needed' | 'unknown', detail }`.
+ * @returns `{ verdict: 'fixed' | 'needed' | 'unknown', detail, preamble? }`.
  */
 async function upstreamVerdict() {
   const appModules = resolveAppModulesDir()
@@ -90,17 +103,106 @@ async function upstreamVerdict() {
       return { verdict: 'unknown', detail: 'ENCODING_PREAMBLE is gone from dsh-pwsh-local; re-read the encoding contract before deciding anything' }
     }
     if (/chcp(?:\.com)?\s+65001|SetConsoleOutputCP/iu.test(preamble)) {
-      return { verdict: 'fixed', detail: 'ENCODING_PREAMBLE now pins the console code page itself' }
+      return { verdict: 'fixed', detail: 'ENCODING_PREAMBLE now pins the console code page itself', preamble }
     }
-    return { verdict: 'needed', detail: 'ENCODING_PREAMBLE still pins only the .NET output encoding (no chcp / SetConsoleOutputCP)' }
+    return { verdict: 'needed', detail: 'ENCODING_PREAMBLE still pins only the .NET output encoding (no chcp / SetConsoleOutputCP)', preamble }
   } catch (error) {
     return { verdict: 'unknown', detail: `could not read dsh-pwsh-local: ${error instanceof Error ? error.message : String(error)}` }
   }
 }
 
+/**
+ * Run the collector's path in one process: force CP936 **first** (the code page a zh-CN console
+ * starts with), then apply `preamble`, then print the sample through a nested `powershell`, and hand
+ * back the raw stdout decoded as UTF-8 — no transcoding in between, because the defect *is* a
+ * decoding mismatch.
+ *
+ * The order matters: a preamble that pins `chcp.com 65001` must be able to undo the forced code
+ * page, or a fixed upstream would be scored as broken. Every console command is silenced so the only
+ * thing that can reach stdout is the sample.
+ * @param preamble - the host's encoding preamble, or `undefined` for the control run.
+ * @returns `{ ok: true, text }` or `{ ok: false, error }`.
+ */
+function nestedUnderCp936(preamble) {
+  const lines = ['chcp.com 936 > $null']
+  if (preamble !== undefined) lines.push(preamble)
+  lines.push(`powershell -NoProfile -Command "Write-Output '${CP936_SAMPLE}'"`)
+  const script = `${lines.join('\r\n')}\r\n`
+  const run = spawnSync(
+    'pwsh',
+    ['-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')],
+    { encoding: 'buffer', timeout: 30_000 },
+  )
+  if (run.error) return { ok: false, error: run.error.message }
+  const stderr = (run.stderr ?? Buffer.alloc(0)).toString('utf8').trim()
+  if (run.status !== 0) return { ok: false, error: `pwsh exited ${run.status}${stderr ? `: ${stderr}` : ''}` }
+  return { ok: true, text: (run.stdout ?? Buffer.alloc(0)).toString('utf8') }
+}
+
+/** Did the sample come back intact, and how many bytes were rejected as not-UTF-8? */
+function judgeNested(text) {
+  const lines = text.replaceAll('\r', '').split('\n').map((line) => line.trim()).filter(Boolean)
+  return {
+    survived: lines.at(-1) === CP936_SAMPLE,
+    replacements: [...text].filter((character) => character === REPLACEMENT).length,
+    shown: lines.at(-1) ?? '',
+  }
+}
+
+/**
+ * Decide the README's second criterion by experiment. The control run comes first: a machine where
+ * the *unfixed* path already prints correctly cannot tell a fix from a non-reproduction.
+ * @param preamble - the installed host's encoding preamble.
+ * @returns `{ verdict: 'fixed' | 'needed' | 'unknown', detail }`.
+ */
+function cp936Verdict(preamble) {
+  if (process.platform !== 'win32') {
+    return { verdict: 'unknown', detail: 'not Windows — there is no console code page to force' }
+  }
+  const control = nestedUnderCp936(undefined)
+  if (!control.ok) return { verdict: 'unknown', detail: `control run failed: ${control.error}` }
+  const controlJudged = judgeNested(control.text)
+  if (controlJudged.survived) {
+    return { verdict: 'unknown', detail: 'the control run (no preamble) already printed the sample intact — this machine cannot reproduce the defect, so a clean experiment would prove nothing' }
+  }
+  const experiment = nestedUnderCp936(preamble)
+  if (!experiment.ok) return { verdict: 'unknown', detail: `experiment failed: ${experiment.error}` }
+  const judged = judgeNested(experiment.text)
+  if (judged.survived) {
+    return { verdict: 'fixed', detail: 'a nested powershell under code page 936 already emits UTF-8 with the installed ENCODING_PREAMBLE' }
+  }
+  return { verdict: 'needed', detail: `nested output is still not UTF-8 (${judged.replacements} replacement character(s); saw \`${judged.shown}\`)` }
+}
+
 const found = references()
 
-if (verifyOnly) {
+if (cp936Only) {
+  const { verdict: structural, detail: structuralDetail, preamble } = await upstreamVerdict()
+  if (preamble === undefined) {
+    console.error(`unknown — ${structuralDetail}`)
+    process.exitCode = 2
+  } else {
+    console.log(`structural check: ${structuralDetail}`)
+    const { verdict, detail } = cp936Verdict(preamble)
+    console.log(`cp936 experiment: ${detail}`)
+    if (verdict === 'fixed') {
+      console.error('\nnot ok — the experiment says a nested powershell under code page 936 already survives')
+      console.error('with the installed ENCODING_PREAMBLE, so the README\'s second criterion looks met even')
+      console.error('though the preamble was not changed. Confirm it on the real Host first (set')
+      console.error('`utf8Console: false`, restart, run the same nested script), then follow the removal')
+      console.error('contract in README.md.')
+      process.exitCode = 1
+    } else if (verdict === 'needed') {
+      console.log('\nok — the bridge is still needed: this is the defect it exists for, reproduced.')
+      console.log('(the control run without the preamble mangled the sample, so the experiment can see it)')
+      process.exitCode = 0
+    } else {
+      console.error(`\nunknown — ${detail}`)
+      process.exitCode = 2
+    }
+    console.log(`(structural verdict for reference: ${structural})`)
+  }
+} else if (verifyOnly) {
   if (found.length === 0) {
     console.log('ok — no reference to the UTF-8 console bridge remains (README removal contract, acceptance criterion)')
     process.exitCode = 0

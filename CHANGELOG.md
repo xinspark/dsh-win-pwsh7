@@ -27,6 +27,15 @@
   stays. Note the shape of upstream's fix: rc.5 added `PYTHONIOENCODING` to `ENV_OVERRIDES` rather
   than a `chcp`, so "the exit code is 0" means *this bridge's condition still holds*, not that
   upstream did nothing.
+- **The second removal criterion became an experiment.** `node tools/utf8-removal.mjs --cp936`
+  forces code page 936, injects the installed `ENCODING_PREAMBLE` in the host's order, prints Chinese
+  through a nested `powershell`, and decodes the raw stdout as UTF-8 — the collector's path. It runs a
+  control without the preamble first, because an experiment that cannot reproduce the defect proves
+  nothing when it reports success. First result on pwsh 7.6.9: the control run mangles the sample
+  (GBK bytes `c7b6cc…`), the preamble run returns `嵌套中文测试` — i.e. the preamble alone already
+  fixes nested output, and the bridge may be a second layer of the same protection. That is an
+  offline experiment on the spawn path, not the real Host (no console, piped `subprocess`), so the
+  bridge stays until `utf8Console: false` is checked on a restarted instance.
 - **Verified locally:** five gates green on DSH 0.2.2-rc.5 (host 2 tools / 1 prompt section, client
   3 contributions / 8 dictionaries, UTF-8 bridge paths, native 41 checks on 12 coherent packages,
   24 documents); live check on the restarted instance — `pwsh` runs 7.6.9, `echo a && echo b` chains,
